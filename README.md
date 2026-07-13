@@ -19,7 +19,7 @@
 | 데이터베이스 | Supabase (Postgres) |
 | 이미지 저장 | Supabase Storage (`card-images` 버킷) |
 | 인증 | Supabase Auth (이메일 매직 링크) |
-| AI 추출 | Google Gemini API (`gemini-2.0-flash`) |
+| AI 추출 | Google Gemini API (`gemini-2.5-flash-lite`) |
 | 배포 | Vercel |
 
 패키지 관리는 **npm**만 사용합니다 (`package-lock.json` 커밋).

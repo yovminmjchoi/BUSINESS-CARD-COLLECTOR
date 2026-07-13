@@ -2,8 +2,9 @@ import { GoogleGenAI } from "@google/genai";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 명함 추출 모델 (무료 티어). 필요 시 최신 모델로 교체.
-const MODEL = "gemini-2.0-flash";
+// 명함 추출 모델 (무료 티어). gemini-2.0-flash 는 2026-03 지원 종료로 무료 할당량 0.
+// gemini-2.5-flash-lite: 현행 무료 티어 지원, RPM/일일 한도 넉넉, 비전 입력 지원.
+const MODEL = "gemini-2.5-flash-lite";
 
 // 추출 결과 스키마 (lib/prompts/card-extract.md 와 일치)
 export interface CardExtraction {
