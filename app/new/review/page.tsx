@@ -43,6 +43,10 @@ export default function ReviewPage() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [form, setForm] = useState<CardExtraction>(EMPTY);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [personNote, setPersonNote] = useState("");
+  const [companyNote, setCompanyNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cardDraft");
@@ -75,6 +79,37 @@ export default function ReviewPage() {
 
   function set(key: keyof CardExtraction, value: string) {
     setForm((f) => ({ ...f, [key]: value === "" ? null : value }));
+  }
+
+  async function handleSave() {
+    if (!draft) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const res = await fetch("/api/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: form,
+          extraction: draft.extraction,
+          imageFrontPath: draft.imageFrontPath,
+          imageBackPath: draft.imageBackPath,
+          personNote,
+          companyNote,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveError(data.error ?? "저장에 실패했습니다.");
+        setSaving(false);
+        return;
+      }
+      sessionStorage.removeItem("cardDraft");
+      router.push(`/card/${data.id}`);
+    } catch {
+      setSaveError("네트워크 오류. 잠시 후 다시 시도하세요.");
+      setSaving(false);
+    }
   }
 
   return (
@@ -121,18 +156,43 @@ export default function ReviewPage() {
         ))}
       </div>
 
+      {/* 메모 */}
+      <div className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">인물 메모</span>
+          <textarea
+            rows={2}
+            value={personNote}
+            onChange={(e) => setPersonNote(e.target.value)}
+            placeholder="예: 소개로 만남, 후속 미팅 필요"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-gray-500">회사 메모</span>
+          <textarea
+            rows={2}
+            value={companyNote}
+            onChange={(e) => setCompanyNote(e.target.value)}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none"
+          />
+        </label>
+      </div>
+
       <div className="rounded-lg bg-gray-100 p-3 text-xs text-gray-600">
         <div>언어: {form.language ?? "-"} · 확신도: {form.confidence ?? "-"}</div>
         {form.notes && <div className="mt-1">판독 메모: {form.notes}</div>}
       </div>
 
+      {saveError && <p className="text-sm text-red-600">{saveError}</p>}
+
       <button
         type="button"
-        disabled
-        className="mt-2 w-full rounded-lg bg-gray-300 px-4 py-3 text-base font-medium text-white"
-        title="저장은 다음 단계에서 연결됩니다"
+        onClick={handleSave}
+        disabled={saving}
+        className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
       >
-        저장 (7단계에서 연결 예정)
+        {saving ? "저장 중…" : "저장"}
       </button>
     </main>
   );
