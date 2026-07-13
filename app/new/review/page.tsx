@@ -100,7 +100,10 @@ export default function ReviewPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setSaveError(data.error ?? "저장에 실패했습니다.");
+        setSaveError(
+          [data.error, data.detail].filter(Boolean).join(" — ") ||
+            "저장에 실패했습니다.",
+        );
         setSaving(false);
         return;
       }
