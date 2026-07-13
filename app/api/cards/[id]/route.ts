@@ -28,7 +28,7 @@ export async function PATCH(
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  let body: { values?: Record<string, unknown>; status?: string };
+  let body: { values?: Record<string, unknown>; status?: string; tagIds?: string[] };
   try {
     body = await request.json();
   } catch {
@@ -89,6 +89,16 @@ export async function PATCH(
   }
   if (edits.length > 0) {
     await supabase.from("card_edits").insert(edits);
+  }
+
+  // 태그 재설정 (tagIds 가 전달된 경우에만): 기존 연결 삭제 후 재삽입
+  if (Array.isArray(body.tagIds)) {
+    await supabase.from("card_tags").delete().eq("card_id", id);
+    if (body.tagIds.length > 0) {
+      await supabase.from("card_tags").insert(
+        body.tagIds.map((tagId) => ({ card_id: id, tag_id: tagId })),
+      );
+    }
   }
 
   return NextResponse.json({ ok: true });

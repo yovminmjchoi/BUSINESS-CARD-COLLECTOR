@@ -26,6 +26,12 @@ export default async function CardDetailPage({
     .eq("card_id", id)
     .order("edited_at", { ascending: false });
 
+  const { data: cardTags } = await supabase
+    .from("card_tags")
+    .select("tag_id")
+    .eq("card_id", id);
+  const tagIds = (cardTags ?? []).map((r) => r.tag_id as string);
+
   async function signed(path: string | null): Promise<string | null> {
     if (!path) return null;
     const { data } = await supabase.storage
@@ -43,6 +49,7 @@ export default async function CardDetailPage({
     <CardDetail
       card={card}
       edits={(edits ?? []) as CardEdit[]}
+      initialTagIds={tagIds}
       frontUrl={frontUrl}
       backUrl={backUrl}
     />

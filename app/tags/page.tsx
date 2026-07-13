@@ -1,16 +1,134 @@
-import TabBar from "@/components/TabBar";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect, useState } from "react";
+import TabBar from "@/components/TabBar";
+import { TAG_COLORS, type Tag } from "@/components/TagSelector";
 
 export default function TagsPage() {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [newName, setNewName] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/tags")
+      .then((r) => r.json())
+      .then((d) => setTags(d.tags ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function create() {
+    const name = newName.trim();
+    if (!name) return;
+    setError("");
+    const res = await fetch("/api/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, color: TAG_COLORS[tags.length % TAG_COLORS.length] }),
+    });
+    const d = await res.json();
+    if (!res.ok) {
+      setError(d.error ?? "추가 실패");
+      return;
+    }
+    setTags((t) => [...t, d.tag].sort((a, b) => a.name.localeCompare(b.name)));
+    setNewName("");
+  }
+
+  async function patch(id: string, body: { name?: string; color?: string }) {
+    const res = await fetch(`/api/tags/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json();
+    if (res.ok && d.tag) {
+      setTags((ts) => ts.map((t) => (t.id === id ? d.tag : t)));
+    } else {
+      setError(d.error ?? "변경 실패");
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("이 태그를 삭제할까요? 명함에서도 제거됩니다.")) return;
+    const res = await fetch(`/api/tags/${id}`, { method: "DELETE" });
+    if (res.ok) setTags((ts) => ts.filter((t) => t.id !== id));
+  }
+
   return (
     <main className="mx-auto min-h-screen max-w-md pb-24">
       <div className="border-b border-gray-100 p-4">
         <h1 className="text-lg font-bold">태그</h1>
       </div>
-      <p className="p-12 text-center text-sm text-gray-400">
-        태그 관리는 10단계에서 추가됩니다.
-      </p>
+
+      <div className="flex gap-2 p-4">
+        <input
+          type="text"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && create()}
+          placeholder="새 태그 이름"
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-base focus:border-gray-900 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={create}
+          disabled={!newName.trim()}
+          className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white disabled:opacity-40"
+        >
+          추가
+        </button>
+      </div>
+
+      {error && <p className="px-4 text-sm text-red-600">{error}</p>}
+
+      {loading ? (
+        <p className="p-8 text-center text-sm text-gray-400">불러오는 중…</p>
+      ) : tags.length === 0 ? (
+        <p className="p-8 text-center text-sm text-gray-400">태그가 없습니다.</p>
+      ) : (
+        <ul className="flex flex-col">
+          {tags.map((t) => (
+            <li
+              key={t.id}
+              className="flex items-center gap-3 border-b border-gray-100 px-4 py-3"
+            >
+              <div className="flex gap-1">
+                {TAG_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-label={`색 ${c}`}
+                    onClick={() => patch(t.id, { color: c })}
+                    className={
+                      "h-5 w-5 rounded-full " +
+                      (t.color === c ? "ring-2 ring-gray-900 ring-offset-1" : "")
+                    }
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+              <input
+                type="text"
+                defaultValue={t.name}
+                onBlur={(e) => {
+                  const name = e.target.value.trim();
+                  if (name && name !== t.name) patch(t.id, { name });
+                }}
+                className="min-w-0 flex-1 rounded border border-transparent px-1 py-1 text-base focus:border-gray-300 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => remove(t.id)}
+                className="flex-shrink-0 text-sm text-red-600"
+              >
+                삭제
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <TabBar />
     </main>
   );

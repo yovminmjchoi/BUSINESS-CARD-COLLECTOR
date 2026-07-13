@@ -8,10 +8,12 @@ export default function SearchBar({
   q,
   status,
   sort,
+  tag,
 }: {
   q: string;
   status: string;
   sort: string;
+  tag: string;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(q);
@@ -27,6 +29,7 @@ export default function SearchBar({
       if (next.trim()) p.set("q", next.trim());
       if (status) p.set("status", status);
       if (sort) p.set("sort", sort);
+      if (tag) p.set("tag", tag);
       const qs = p.toString();
       router.replace(qs ? `/?${qs}` : "/");
     }, 300);

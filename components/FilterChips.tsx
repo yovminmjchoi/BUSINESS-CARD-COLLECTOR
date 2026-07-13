@@ -18,10 +18,12 @@ export default function FilterChips({
   q,
   status,
   sort,
+  tag,
 }: {
   q: string;
   status: string;
   sort: string;
+  tag: string;
 }) {
   const router = useRouter();
 
@@ -30,6 +32,7 @@ export default function FilterChips({
     if (q) p.set("q", q);
     if (nextStatus) p.set("status", nextStatus);
     if (nextSort) p.set("sort", nextSort);
+    if (tag) p.set("tag", tag);
     const qs = p.toString();
     router.replace(qs ? `/?${qs}` : "/");
   }

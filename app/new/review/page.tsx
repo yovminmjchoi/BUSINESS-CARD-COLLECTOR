@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import TagSelector from "@/components/TagSelector";
 import type { CardExtraction } from "@/lib/gemini";
 
 interface Draft {
@@ -45,6 +46,7 @@ export default function ReviewPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [personNote, setPersonNote] = useState("");
   const [companyNote, setCompanyNote] = useState("");
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -96,6 +98,7 @@ export default function ReviewPage() {
           imageBackPath: draft.imageBackPath,
           personNote,
           companyNote,
+          tagIds,
         }),
       });
       const data = await res.json();
@@ -158,6 +161,9 @@ export default function ReviewPage() {
           </label>
         ))}
       </div>
+
+      {/* 태그 */}
+      <TagSelector value={tagIds} onChange={setTagIds} />
 
       {/* 메모 */}
       <div className="flex flex-col gap-3">

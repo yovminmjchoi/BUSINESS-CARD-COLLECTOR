@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import TagSelector from "@/components/TagSelector";
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "name_ko", label: "이름 (한글)" },
@@ -39,11 +40,13 @@ export interface CardEdit {
 export default function CardDetail({
   card,
   edits,
+  initialTagIds,
   frontUrl,
   backUrl,
 }: {
   card: Record<string, string | null>;
   edits: CardEdit[];
+  initialTagIds: string[];
   frontUrl: string | null;
   backUrl: string | null;
 }) {
@@ -54,6 +57,7 @@ export default function CardDetail({
     return init;
   });
   const [status, setStatus] = useState(card.status ?? "confirmed");
+  const [tagIds, setTagIds] = useState<string[]>(initialTagIds);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
@@ -70,7 +74,7 @@ export default function CardDetail({
       const res = await fetch(`/api/cards/${card.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: form, status }),
+        body: JSON.stringify({ values: form, status, tagIds }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -151,6 +155,8 @@ export default function CardDetail({
           </label>
         ))}
       </div>
+
+      <TagSelector value={tagIds} onChange={setTagIds} />
 
       {message && <p className="text-center text-sm text-gray-600">{message}</p>}
 

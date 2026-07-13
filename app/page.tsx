@@ -2,7 +2,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SearchBar from "@/components/SearchBar";
 import FilterChips from "@/components/FilterChips";
-import CardListItem, { type CardListData } from "@/components/CardListItem";
+import CardListItem, {
+  type CardListData,
+  type CardListTag,
+} from "@/components/CardListItem";
+import TagFilter from "@/components/TagFilter";
 import TabBar from "@/components/TabBar";
 
 export const dynamic = "force-dynamic";
@@ -15,23 +19,34 @@ const SEARCH_COLUMNS = [
 export default async function ListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; sort?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; sort?: string; tag?: string }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const status = sp.status ?? "";
   const sort = sp.sort ?? "";
+  const tag = sp.tag ?? "";
 
   const supabase = await createClient();
 
   let query = supabase
     .from("cards")
     .select(
-      "id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path",
+      "id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,card_tags(tags(id,name,color))",
     );
 
   if (status === "review_needed" || status === "confirmed") {
     query = query.eq("status", status);
+  }
+
+  // 태그 필터: 해당 태그를 가진 card_id 로 제한
+  if (tag) {
+    const { data: ct } = await supabase
+      .from("card_tags")
+      .select("card_id")
+      .eq("tag_id", tag);
+    const ids = (ct ?? []).map((r) => r.card_id as string);
+    query = query.in("id", ids.length > 0 ? ids : ["00000000-0000-0000-0000-000000000000"]);
   }
 
   if (q) {
@@ -53,7 +68,31 @@ export default async function ListPage({
   }
 
   const { data } = await query;
-  const cards = (data ?? []) as CardListData[];
+
+  type Row = Omit<CardListData, "tags"> & {
+    card_tags: { tags: CardListTag | CardListTag[] | null }[] | null;
+  };
+  const cards: CardListData[] = ((data ?? []) as unknown as Row[]).map((row) => ({
+    id: row.id,
+    name_ko: row.name_ko,
+    name_en: row.name_en,
+    company_ko: row.company_ko,
+    company_en: row.company_en,
+    title_ko: row.title_ko,
+    title_en: row.title_en,
+    status: row.status,
+    image_front_path: row.image_front_path,
+    tags: (row.card_tags ?? []).flatMap((ct) => {
+      const tg = ct.tags;
+      if (!tg) return [];
+      return Array.isArray(tg) ? tg : [tg];
+    }),
+  }));
+
+  const { data: allTags } = await supabase
+    .from("tags")
+    .select("id,name,color")
+    .order("name");
 
   // 썸네일 서명 URL 일괄 발급
   const thumbMap = new Map<string, string>();
@@ -73,8 +112,15 @@ export default async function ListPage({
     <main className="mx-auto min-h-screen max-w-md pb-28">
       <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
         <h1 className="text-lg font-bold">명함 {cards.length > 0 && `(${cards.length})`}</h1>
-        <SearchBar q={q} status={status} sort={sort} />
-        <FilterChips q={q} status={status} sort={sort} />
+        <SearchBar q={q} status={status} sort={sort} tag={tag} />
+        <FilterChips q={q} status={status} sort={sort} tag={tag} />
+        <TagFilter
+          tags={(allTags ?? []) as CardListTag[]}
+          q={q}
+          status={status}
+          sort={sort}
+          tag={tag}
+        />
       </div>
 
       {cards.length === 0 ? (

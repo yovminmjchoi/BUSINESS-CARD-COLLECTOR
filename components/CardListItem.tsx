@@ -1,5 +1,11 @@
 import Link from "next/link";
 
+export interface CardListTag {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
 export interface CardListData {
   id: string;
   name_ko: string | null;
@@ -10,6 +16,7 @@ export interface CardListData {
   title_en: string | null;
   status: string;
   image_front_path: string | null;
+  tags: CardListTag[];
 }
 
 export default function CardListItem({
@@ -52,6 +59,24 @@ export default function CardListItem({
           )}
         </div>
         {sub && <div className="truncate text-sm text-gray-500">{sub}</div>}
+        {card.tags.length > 0 && (
+          <div className="mt-1 flex gap-1">
+            {card.tags.slice(0, 2).map((t) => (
+              <span
+                key={t.id}
+                className="rounded-full px-1.5 py-0.5 text-[10px] text-white"
+                style={{ backgroundColor: t.color ?? "#6b7280" }}
+              >
+                {t.name}
+              </span>
+            ))}
+            {card.tags.length > 2 && (
+              <span className="text-[10px] text-gray-400">
+                +{card.tags.length - 2}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );

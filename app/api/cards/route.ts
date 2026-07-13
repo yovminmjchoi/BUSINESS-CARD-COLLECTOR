@@ -19,6 +19,7 @@ interface SaveBody {
   imageBackPath: string | null;
   personNote?: string | null;
   companyNote?: string | null;
+  tagIds?: string[];
 }
 
 function clean(v: unknown): string | null {
@@ -118,6 +119,13 @@ export async function POST(request: Request) {
   if (edits.length > 0) {
     // 이력 실패는 저장 성공을 막지 않음 (best-effort)
     await supabase.from("card_edits").insert(edits);
+  }
+
+  // 태그 연결
+  if (Array.isArray(body.tagIds) && body.tagIds.length > 0) {
+    await supabase.from("card_tags").insert(
+      body.tagIds.map((tagId) => ({ card_id: inserted.id, tag_id: tagId })),
+    );
   }
 
   return NextResponse.json({ id: inserted.id, status });
