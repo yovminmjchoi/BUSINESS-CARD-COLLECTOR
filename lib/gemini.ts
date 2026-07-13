@@ -2,9 +2,12 @@ import { GoogleGenAI } from "@google/genai";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-// 명함 추출 모델 (무료 티어). gemini-2.0-flash 는 2026-03 지원 종료로 무료 할당량 0.
-// gemini-2.5-flash-lite: 현행 무료 티어 지원, RPM/일일 한도 넉넉, 비전 입력 지원.
-const MODEL = "gemini-2.5-flash-lite";
+// 명함 추출 모델 (무료 티어). 신규 사용자에게 막히는 모델이 생기면 .env.local 의
+// GEMINI_MODEL 로 재푸시 없이 교체 가능. 사용 가능한 모델은 아래로 확인:
+//   curl "https://generativelanguage.googleapis.com/v1beta/models?key=$GOOGLE_AI_API_KEY"
+// 2026-07 기준 stable 비전 모델: gemini-3.5-flash / gemini-3.1-flash-lite /
+//   gemini-2.5-flash / gemini-2.5-flash-lite (구형은 신규 계정에서 404 날 수 있음).
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
 
 // 추출 결과 스키마 (lib/prompts/card-extract.md 와 일치)
 export interface CardExtraction {
