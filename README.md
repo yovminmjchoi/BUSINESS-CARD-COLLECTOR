@@ -44,6 +44,10 @@ npm install
    - `0001_init.sql` → 테이블 + RLS + 트리거
    - `0002_indexes.sql` → 확장·인덱스 (pg_trgm, tsvector)
 4. **Storage** 에서 `card-images` 버킷 생성 (Private). RLS 정책은 `0001_init.sql`에 포함되어 있습니다.
+5. **Authentication → URL Configuration** 에서 매직 링크 리다이렉트 허용:
+   - `Site URL`: 배포 URL (로컬 테스트 시 `http://localhost:3000`)
+   - `Redirect URLs`: `http://localhost:3000/auth/callback` 와 배포 URL의 `/auth/callback` 둘 다 추가
+   - (선택) **Authentication → Providers → Email** 에서 매직 링크가 켜져 있는지 확인
 
 ### 3. 환경변수
 
@@ -88,7 +92,7 @@ supabase/       마이그레이션 SQL
 - [x] 1. `.gitignore` / `.env.example` / README
 - [x] 2. Next.js + TypeScript + Tailwind 초기화
 - [x] 3. Supabase 마이그레이션 SQL
-- [ ] 4. Supabase Auth 매직 링크 + 화이트리스트 ★
+- [x] 4. Supabase Auth 매직 링크 + 화이트리스트 ★
 - [ ] 5. 카메라 촬영 + 이미지 업로드
 - [ ] 6. `/api/extract` + Anthropic 추출 ★ (실제 명함 검증)
 - [ ] 7. 저장 로직 + 회사명 정규화
