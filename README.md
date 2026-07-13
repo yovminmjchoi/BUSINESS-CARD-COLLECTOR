@@ -4,7 +4,7 @@
 
 - 1인 사용 (소유자 1명만 로그인, 회원가입 개방 없음)
 - 설치 불필요 — 링크만 열면 촬영·저장·검색 모두 가능
-- 완전 관리형 서비스만 사용 (Supabase + Vercel + Anthropic API)
+- 완전 관리형 서비스만 사용 (Supabase + Vercel + Google Gemini API)
 
 > ⚠️ 이 앱은 개인용입니다. `.env`와 명함 데이터·이미지는 커밋되지 않습니다. Supabase RLS로 소유자 외 접근이 차단되지만, 배포 URL은 신뢰하는 사람에게만 공유하세요.
 
@@ -19,7 +19,7 @@
 | 데이터베이스 | Supabase (Postgres) |
 | 이미지 저장 | Supabase Storage (`card-images` 버킷) |
 | 인증 | Supabase Auth (이메일 매직 링크) |
-| AI 추출 | Anthropic API (`claude-sonnet-5`) |
+| AI 추출 | Google Gemini API (`gemini-2.0-flash`) |
 | 배포 | Vercel |
 
 패키지 관리는 **npm**만 사용합니다 (`package-lock.json` 커밋).
@@ -58,7 +58,7 @@ cp .env.example .env.local
 `.env.local`에 값 입력:
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — Supabase에서 복사
-- `ANTHROPIC_API_KEY` — [Anthropic Console](https://console.anthropic.com/)
+- `GOOGLE_AI_API_KEY` — [Google AI Studio](https://aistudio.google.com/apikey)
 - `ALLOWED_LOGIN_EMAIL` — 로그인 허용할 본인 이메일 하나
 
 ### 4. 로컬 테스트
@@ -81,7 +81,7 @@ npm run dev
 ```
 app/            App Router 페이지 + API 라우트
 components/     UI 컴포넌트
-lib/            Supabase 클라이언트, Anthropic 헬퍼, 정규화, 프롬프트
+lib/            Supabase 클라이언트, Gemini 헬퍼, 정규화, 프롬프트
 supabase/       마이그레이션 SQL
 ```
 
@@ -93,8 +93,8 @@ supabase/       마이그레이션 SQL
 - [x] 2. Next.js + TypeScript + Tailwind 초기화
 - [x] 3. Supabase 마이그레이션 SQL
 - [x] 4. Supabase Auth 매직 링크 + 화이트리스트 ★
-- [ ] 5. 카메라 촬영 + 이미지 업로드
-- [ ] 6. `/api/extract` + Anthropic 추출 ★ (실제 명함 검증)
+- [x] 5. 카메라 촬영 + 이미지 업로드
+- [ ] 6. `/api/extract` + Gemini 추출 ★ (실제 명함 검증)
 - [ ] 7. 저장 로직 + 회사명 정규화
 - [ ] 8. 목록 + 검색 + 필터 + 정렬
 - [ ] 9. 상세/편집 + 편집 이력

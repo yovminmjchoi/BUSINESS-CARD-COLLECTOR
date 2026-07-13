@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +14,12 @@ export default async function HomePage() {
       <h1 className="text-2xl font-bold">명함 정리</h1>
       <p className="text-gray-600">로그인 완료 ✓</p>
       <p className="text-sm text-gray-500">{user?.email}</p>
-      <p className="text-sm text-gray-400">
-        다음 단계에서 촬영·목록 화면을 추가합니다. (개발 순서 5단계)
-      </p>
+      <Link
+        href="/new"
+        className="mt-2 w-full max-w-xs rounded-lg bg-blue-600 px-4 py-3 text-center text-base font-medium text-white"
+      >
+        명함 촬영
+      </Link>
 
       <form action="/api/auth/logout" method="post" className="mt-4">
         <button
