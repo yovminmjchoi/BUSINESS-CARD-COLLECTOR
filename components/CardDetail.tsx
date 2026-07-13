@@ -163,40 +163,55 @@ export default function CardDetail({
         {saving ? "저장 중…" : "저장"}
       </button>
 
-      {/* 편집 이력 */}
-      <div className="mt-2 border-t border-gray-100 pt-3">
-        <button
-          type="button"
-          onClick={() => setShowHistory((v) => !v)}
-          className="text-sm text-gray-500"
-        >
-          편집 이력 {showHistory ? "숨기기" : "보기"} ({edits.length})
-        </button>
-        {showHistory && (
-          <ul className="mt-2 flex flex-col gap-2">
-            {edits.length === 0 && (
-              <li className="text-sm text-gray-400">이력이 없습니다.</li>
+      {/* 편집 이력 — 직접 수정한 내역만. AI 최초 추출은 한 줄 요약. */}
+      {(() => {
+        const userEdits = edits.filter((e) => e.source === "user_edit");
+        const aiEdits = edits.filter((e) => e.source === "ai_extract");
+        const firstExtractAt = aiEdits[0]?.edited_at ?? null;
+        return (
+          <div className="mt-2 border-t border-gray-100 pt-3">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-sm text-gray-500"
+            >
+              편집 이력 {showHistory ? "숨기기" : "보기"} ({userEdits.length})
+            </button>
+            {showHistory && (
+              <ul className="mt-2 flex flex-col gap-2">
+                {firstExtractAt && (
+                  <li className="rounded-lg bg-gray-50 p-2 text-xs text-gray-500">
+                    최초 AI 추출 ·{" "}
+                    {new Date(firstExtractAt).toLocaleString("ko-KR")} ·{" "}
+                    {aiEdits.length}개 필드 자동 입력
+                  </li>
+                )}
+                {userEdits.length === 0 && (
+                  <li className="text-sm text-gray-400">
+                    직접 수정한 내역이 없습니다.
+                  </li>
+                )}
+                {userEdits.map((e) => (
+                  <li key={e.id} className="rounded-lg bg-blue-50 p-2 text-xs">
+                    <div className="flex justify-between text-gray-500">
+                      <span>{FIELD_LABELS[e.field] ?? e.field}</span>
+                      <span>
+                        수정 · {new Date(e.edited_at).toLocaleString("ko-KR")}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-gray-700">
+                      <span className="text-gray-400 line-through">
+                        {e.old_value ?? "(없음)"}
+                      </span>{" "}
+                      → <span>{e.new_value ?? "(없음)"}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
-            {edits.map((e) => (
-              <li key={e.id} className="rounded-lg bg-gray-50 p-2 text-xs">
-                <div className="flex justify-between text-gray-500">
-                  <span>{FIELD_LABELS[e.field] ?? e.field}</span>
-                  <span>
-                    {e.source === "ai_extract" ? "AI 추출" : "수정"} ·{" "}
-                    {new Date(e.edited_at).toLocaleString("ko-KR")}
-                  </span>
-                </div>
-                <div className="mt-1 text-gray-700">
-                  <span className="text-gray-400 line-through">
-                    {e.old_value ?? "(없음)"}
-                  </span>{" "}
-                  → <span>{e.new_value ?? "(없음)"}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          </div>
+        );
+      })()}
 
       <button
         type="button"
