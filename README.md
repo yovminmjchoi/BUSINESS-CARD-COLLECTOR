@@ -43,6 +43,7 @@ npm install
 3. **SQL Editor** 에서 `supabase/migrations/` 안의 SQL을 **번호 순서대로** 실행
    - `0001_init.sql` → 테이블 + RLS + 트리거
    - `0002_indexes.sql` → 확장·인덱스 (pg_trgm, tsvector)
+   - `0003_grants.sql` → 역할 권한 부여 (SQL Editor 생성 시 "permission denied" 방지)
 4. **Storage** 에서 `card-images` 버킷 생성 (Private). RLS 정책은 `0001_init.sql`에 포함되어 있습니다.
 5. **Authentication → URL Configuration**
    - `Site URL`: 로컬 테스트 시 `http://localhost:3000` (배포 후 배포 URL로 변경)
