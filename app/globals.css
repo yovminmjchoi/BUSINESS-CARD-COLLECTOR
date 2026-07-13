@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 모바일 우선: 하단 탭 바 높이만큼 본문 여백 확보 */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}
