@@ -44,10 +44,19 @@ npm install
    - `0001_init.sql` → 테이블 + RLS + 트리거
    - `0002_indexes.sql` → 확장·인덱스 (pg_trgm, tsvector)
 4. **Storage** 에서 `card-images` 버킷 생성 (Private). RLS 정책은 `0001_init.sql`에 포함되어 있습니다.
-5. **Authentication → URL Configuration** 에서 매직 링크 리다이렉트 허용:
-   - `Site URL`: 배포 URL (로컬 테스트 시 `http://localhost:3000`)
+5. **Authentication → URL Configuration**
+   - `Site URL`: 로컬 테스트 시 `http://localhost:3000` (배포 후 배포 URL로 변경)
    - `Redirect URLs`: `http://localhost:3000/auth/callback` 와 배포 URL의 `/auth/callback` 둘 다 추가
-   - (선택) **Authentication → Providers → Email** 에서 매직 링크가 켜져 있는지 확인
+6. **Authentication → Providers → Email**
+   - `Confirm email` **끄기** — 매직 링크 로그인만 쓰므로 별도 계정 확인 단계가 불필요하며,
+     켜져 있으면 로그인 링크 대신 "Confirm signup" 메일이 반복 발송됩니다.
+7. **Authentication → Email Templates → Magic Link** — 링크를 `token_hash` 방식으로 교체
+   (기본 `{{ .ConfirmationURL }}`는 SSR PKCE 흐름과 어긋나 로그인이 실패합니다):
+   ```html
+   <h2>로그인</h2>
+   <p><a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=magiclink">로그인하기</a></p>
+   ```
+   (혹시 `Confirm email`을 켜둔다면 **Confirm signup** 템플릿도 동일하게, 단 `type=signup` 으로 교체)
 
 ### 3. 환경변수
 

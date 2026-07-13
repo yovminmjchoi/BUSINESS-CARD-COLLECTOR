@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -8,6 +8,19 @@ export default function LoginPage() {
     "idle",
   );
   const [message, setMessage] = useState("");
+  const [linkError, setLinkError] = useState("");
+
+  // 콜백에서 넘어온 로그인 링크 오류 표시
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get("error");
+    if (err) {
+      setLinkError(
+        err === "auth"
+          ? "로그인 링크가 만료되었거나 유효하지 않습니다. 다시 요청하세요."
+          : `로그인 실패: ${err}`,
+      );
+    }
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -41,6 +54,12 @@ export default function LoginPage() {
           등록된 이메일로 로그인 링크를 보냅니다.
         </p>
       </div>
+
+      {linkError && (
+        <div className="rounded-lg bg-red-50 p-3 text-center text-sm text-red-700">
+          {linkError}
+        </div>
+      )}
 
       {status === "sent" ? (
         <div className="rounded-lg bg-green-50 p-4 text-center text-sm text-green-800">
