@@ -23,6 +23,31 @@ export function normalizeCompanyToken(raw: string | null | undefined): string {
   return s;
 }
 
+// 전화번호에서 숫자만 추출 (중복 비교용)
+export function digitsOnly(phone: string | null | undefined): string {
+  return (phone ?? "").replace(/\D/g, "");
+}
+
+// 트라이그램 Dice 유사도 (pg_trgm 근사). 0~1.
+export function trigramSimilarity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number {
+  const trigrams = (s: string): Set<string> => {
+    const t = ` ${s.toLowerCase().trim()} `;
+    const set = new Set<string>();
+    for (let i = 0; i < t.length - 2; i++) set.add(t.slice(i, i + 3));
+    return set;
+  };
+  if (!a || !b) return 0;
+  const A = trigrams(a);
+  const B = trigrams(b);
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const g of A) if (B.has(g)) inter += 1;
+  return (2 * inter) / (A.size + B.size);
+}
+
 // 한글/영문 회사명을 각각 정규화 후 더 긴 쪽(더 완전한 표기)을 그룹 키로 채택
 export function pickCompanyNormalized(
   companyKo: string | null | undefined,

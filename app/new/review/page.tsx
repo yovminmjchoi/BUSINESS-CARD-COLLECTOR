@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import TagSelector from "@/components/TagSelector";
+import DuplicateWarning, { type DupCandidate } from "@/components/DuplicateWarning";
 import type { CardExtraction } from "@/lib/gemini";
 
 interface Draft {
@@ -49,6 +50,7 @@ export default function ReviewPage() {
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [candidates, setCandidates] = useState<DupCandidate[]>([]);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("cardDraft");
@@ -59,6 +61,25 @@ export default function ReviewPage() {
     const parsed: Draft = JSON.parse(raw);
     setDraft(parsed);
     setForm(parsed.extraction ?? EMPTY);
+
+    // 중복 후보 조회 (추출값 기준)
+    const ex = parsed.extraction;
+    if (ex) {
+      fetch("/api/duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: ex.email,
+          mobile: ex.mobile,
+          name: ex.name_ko || ex.name_en,
+          companyKo: ex.company_ko,
+          companyEn: ex.company_en,
+        }),
+      })
+        .then((r) => r.json())
+        .then((d) => setCandidates(d.candidates ?? []))
+        .catch(() => setCandidates([]));
+    }
 
     // 비공개 버킷 이미지 → 서명 URL (RLS: 소유자만)
     if (parsed.imageFrontPath) {
@@ -118,6 +139,43 @@ export default function ReviewPage() {
     }
   }
 
+  // 기존 명함에 병합(merge=true) 또는 덮어쓰기(merge=false)
+  async function saveToExisting(targetId: string, merge: boolean) {
+    if (!draft) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const res = await fetch(`/api/cards/${targetId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          values: {
+            ...form,
+            person_note: personNote || null,
+            company_note: companyNote || null,
+          },
+          merge,
+          imageFrontPath: draft.imageFrontPath,
+          imageBackPath: draft.imageBackPath,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveError(
+          [data.error, data.detail].filter(Boolean).join(" — ") ||
+            "저장에 실패했습니다.",
+        );
+        setSaving(false);
+        return;
+      }
+      sessionStorage.removeItem("cardDraft");
+      router.push(`/card/${targetId}`);
+    } catch {
+      setSaveError("네트워크 오류. 잠시 후 다시 시도하세요.");
+      setSaving(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 p-6">
       <header>
@@ -138,6 +196,13 @@ export default function ReviewPage() {
           검토 필요 — 핵심 정보가 비었거나 판독 확신도가 낮습니다.
         </div>
       )}
+
+      <DuplicateWarning
+        candidates={candidates}
+        busy={saving}
+        onMerge={(id) => saveToExisting(id, true)}
+        onOverwrite={(id) => saveToExisting(id, false)}
+      />
 
       {imageUrl && (
         // eslint-disable-next-line @next/next/no-img-element

@@ -28,13 +28,21 @@ export async function PATCH(
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
-  let body: { values?: Record<string, unknown>; status?: string; tagIds?: string[] };
+  let body: {
+    values?: Record<string, unknown>;
+    status?: string;
+    tagIds?: string[];
+    merge?: boolean; // true=빈 칸만 채움(기존 우선), false=덮어쓰기(신규 우선)
+    imageFrontPath?: string | null;
+    imageBackPath?: string | null;
+  };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
   const values = body.values ?? {};
+  const merge = body.merge === true;
 
   const { data: existing, error: fetchError } = await supabase
     .from("cards")
@@ -45,8 +53,14 @@ export async function PATCH(
     return NextResponse.json({ error: "명함을 찾을 수 없습니다." }, { status: 404 });
   }
 
+  // merge=병합(기존 값 우선, 빈 칸만 신규로 채움) / 아니면 신규 값으로 덮어쓰기
   const update: Record<string, string | null> = {};
-  for (const f of TEXT_FIELDS) update[f] = clean(values[f]);
+  for (const f of TEXT_FIELDS) {
+    const incoming = clean(values[f]);
+    update[f] = merge
+      ? (clean(existing[f]) ?? incoming)
+      : incoming;
+  }
   update.email = update.email ? update.email.toLowerCase() : null;
   const companyNormalized = pickCompanyNormalized(
     update.company_ko,
@@ -57,8 +71,28 @@ export async function PATCH(
     ...update,
     company_normalized: companyNormalized,
   };
+
+  // 새 이미지 경로 (병합/덮어쓰기 시 전달됨)
+  if ("imageFrontPath" in body) {
+    updatePayload.image_front_path = merge
+      ? ((existing.image_front_path as string | null) ?? body.imageFrontPath ?? null)
+      : (body.imageFrontPath ?? (existing.image_front_path as string | null));
+  }
+  if ("imageBackPath" in body) {
+    updatePayload.image_back_path = merge
+      ? ((existing.image_back_path as string | null) ?? body.imageBackPath ?? null)
+      : (body.imageBackPath ?? (existing.image_back_path as string | null));
+  }
+
+  // 상태: 명시되면 사용, 아니면 결과값 기준 재판정
   if (body.status === "confirmed" || body.status === "review_needed") {
     updatePayload.status = body.status;
+  } else if (merge || "imageFrontPath" in body) {
+    const hasCore =
+      update.name_ko || update.name_en || update.email ||
+      update.mobile || update.office_phone;
+    updatePayload.status =
+      existing.confidence === "low" || !hasCore ? "review_needed" : "confirmed";
   }
 
   const { error: updateError } = await supabase
