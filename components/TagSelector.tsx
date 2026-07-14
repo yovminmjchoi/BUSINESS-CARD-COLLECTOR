@@ -9,8 +9,10 @@ export interface Tag {
 }
 
 export const TAG_COLORS = [
-  "#ef4444", "#f59e0b", "#10b981", "#3b82f6",
-  "#8b5cf6", "#ec4899", "#6b7280",
+  "#ef4444", "#f97316", "#f59e0b", "#eab308",
+  "#84cc16", "#22c55e", "#10b981", "#14b8a6",
+  "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
+  "#d946ef", "#ec4899", "#f43f5e", "#6b7280",
 ];
 
 export default function TagSelector({

@@ -9,6 +9,7 @@ export default function TagsPage() {
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/tags")
@@ -50,9 +51,11 @@ export default function TagsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("이 태그를 삭제할까요? 명함에서도 제거됩니다.")) return;
     const res = await fetch(`/api/tags/${id}`, { method: "DELETE" });
-    if (res.ok) setTags((ts) => ts.filter((t) => t.id !== id));
+    if (res.ok) {
+      setTags((ts) => ts.filter((t) => t.id !== id));
+      setConfirmingId(null);
+    }
   }
 
   return (
@@ -91,9 +94,51 @@ export default function TagsPage() {
           {tags.map((t) => (
             <li
               key={t.id}
-              className="flex items-center gap-3 border-b border-gray-100 px-4 py-3"
+              className="flex flex-col gap-2 border-b border-gray-100 px-4 py-3"
             >
-              <div className="flex gap-1">
+              <div className="flex items-center gap-2">
+                <span
+                  className="h-4 w-4 flex-shrink-0 rounded-full"
+                  style={{ backgroundColor: t.color ?? "#6b7280" }}
+                />
+                <input
+                  type="text"
+                  defaultValue={t.name}
+                  onBlur={(e) => {
+                    const name = e.target.value.trim();
+                    if (name && name !== t.name) patch(t.id, { name });
+                  }}
+                  className="min-w-0 flex-1 rounded border border-transparent px-1 py-1 text-base focus:border-gray-300 focus:outline-none"
+                />
+                {confirmingId === t.id ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => remove(t.id)}
+                      className="flex-shrink-0 rounded bg-red-600 px-2 py-1 text-sm text-white"
+                    >
+                      삭제
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingId(null)}
+                      className="flex-shrink-0 text-sm text-gray-500"
+                    >
+                      취소
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingId(t.id)}
+                    className="flex-shrink-0 text-sm text-gray-400"
+                    aria-label="태그 삭제"
+                  >
+                    ⋯
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 pl-6">
                 {TAG_COLORS.map((c) => (
                   <button
                     key={c}
@@ -108,22 +153,6 @@ export default function TagsPage() {
                   />
                 ))}
               </div>
-              <input
-                type="text"
-                defaultValue={t.name}
-                onBlur={(e) => {
-                  const name = e.target.value.trim();
-                  if (name && name !== t.name) patch(t.id, { name });
-                }}
-                className="min-w-0 flex-1 rounded border border-transparent px-1 py-1 text-base focus:border-gray-300 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => remove(t.id)}
-                className="flex-shrink-0 text-sm text-red-600"
-              >
-                삭제
-              </button>
             </li>
           ))}
         </ul>
