@@ -132,7 +132,7 @@ export default function ReviewPage() {
         return;
       }
       sessionStorage.removeItem("cardDraft");
-      router.push(`/card/${data.id}`);
+      router.push(`/card/${data.id}?done=saved`);
     } catch {
       setSaveError("네트워크 오류. 잠시 후 다시 시도하세요.");
       setSaving(false);
@@ -169,7 +169,7 @@ export default function ReviewPage() {
         return;
       }
       sessionStorage.removeItem("cardDraft");
-      router.push(`/card/${targetId}`);
+      router.push(`/card/${targetId}?done=${merge ? "merged" : "updated"}`);
     } catch {
       setSaveError("네트워크 오류. 잠시 후 다시 시도하세요.");
       setSaving(false);

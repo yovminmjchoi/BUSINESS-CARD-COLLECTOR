@@ -8,8 +8,9 @@ import {
 
 export const runtime = "nodejs";
 
-// 이름 유사 판정 임계값 (같은 회사 조건과 함께 사용)
-const NAME_SIM = 0.5;
+// 이름 유사 임계값: 같은 회사와 함께면 관대(0.5), 회사가 다르면 엄격(0.8, 동명이인 오탐 방지)
+const NAME_SIM_SAME_COMPANY = 0.5;
+const NAME_SIM_DIFF_COMPANY = 0.8;
 
 interface DupInput {
   email?: string | null;
@@ -63,15 +64,24 @@ export async function POST(request: Request) {
     if (digits && c.mobile && digitsOnly(c.mobile) === digits) {
       reasons.push("전화번호 일치");
     }
-    if (
-      name &&
-      companyNorm &&
-      c.company_normalized &&
-      c.company_normalized === companyNorm
-    ) {
+    if (name) {
       const cName = c.name_ko || c.name_en || "";
-      if (trigramSimilarity(name, cName) >= NAME_SIM) {
+      const nameSim = trigramSimilarity(name, cName);
+      const sameCompany =
+        companyNorm &&
+        c.company_normalized &&
+        c.company_normalized === companyNorm;
+
+      if (sameCompany && nameSim >= NAME_SIM_SAME_COMPANY) {
         reasons.push("이름·회사 유사");
+      } else if (
+        !sameCompany &&
+        companyNorm &&
+        c.company_normalized &&
+        nameSim >= NAME_SIM_DIFF_COMPANY
+      ) {
+        // 이름은 같은데 회사가 다름 → 이직/부서이동 가능성
+        reasons.push("이름 같음 (다른 회사 — 이직?)");
       }
     }
 
