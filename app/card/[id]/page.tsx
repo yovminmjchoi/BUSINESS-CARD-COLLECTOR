@@ -4,22 +4,12 @@ import CardDetail, { type CardEdit } from "@/components/CardDetail";
 
 export const dynamic = "force-dynamic";
 
-const FLASH: Record<string, string> = {
-  saved: "저장되었습니다.",
-  merged: "기존 명함에 병합되었습니다.",
-  updated: "기존 명함을 덮어썼습니다.",
-};
-
 export default async function CardDetailPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ done?: string }>;
 }) {
   const { id } = await params;
-  const { done } = await searchParams;
-  const flash = done ? FLASH[done] ?? null : null;
   const supabase = await createClient();
 
   const { data: card } = await supabase
@@ -62,7 +52,6 @@ export default async function CardDetailPage({
       initialTagIds={tagIds}
       frontUrl={frontUrl}
       backUrl={backUrl}
-      flash={flash}
     />
   );
 }

@@ -43,14 +43,12 @@ export default function CardDetail({
   initialTagIds,
   frontUrl,
   backUrl,
-  flash,
 }: {
   card: Record<string, string | null>;
   edits: CardEdit[];
   initialTagIds: string[];
   frontUrl: string | null;
   backUrl: string | null;
-  flash: string | null;
 }) {
   const router = useRouter();
   const [form, setForm] = useState<Record<string, string>>(() => {
@@ -126,12 +124,6 @@ export default function CardDetail({
           <option value="review_needed">검토 필요</option>
         </select>
       </header>
-
-      {flash && (
-        <div className="rounded-lg bg-green-50 p-3 text-center text-sm font-medium text-green-800">
-          ✓ {flash}
-        </div>
-      )}
 
       {frontUrl && (
         // eslint-disable-next-line @next/next/no-img-element

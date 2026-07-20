@@ -19,13 +19,27 @@ const SEARCH_COLUMNS = [
 export default async function ListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; sort?: string; tag?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    sort?: string;
+    tag?: string;
+    done?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
   const status = sp.status ?? "";
   const sort = sp.sort ?? "";
   const tag = sp.tag ?? "";
+  const flash =
+    sp.done === "saved"
+      ? "저장되었습니다."
+      : sp.done === "merged"
+        ? "기존 명함에 병합되었습니다."
+        : sp.done === "updated"
+          ? "기존 명함을 덮어썼습니다."
+          : null;
 
   const supabase = await createClient();
 
@@ -122,6 +136,12 @@ export default async function ListPage({
           tag={tag}
         />
       </div>
+
+      {flash && (
+        <div className="mx-4 mt-3 rounded-lg bg-green-50 p-3 text-center text-sm font-medium text-green-800">
+          ✓ {flash}
+        </div>
+      )}
 
       {cards.length === 0 ? (
         <div className="flex flex-col items-center gap-2 p-12 text-center text-gray-400">
