@@ -10,6 +10,8 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/extract": ["./lib/prompts/**"],
   },
+  // HEIC 디코더(wasm)는 번들링하지 말고 런타임 require (emscripten 경고/누락 방지)
+  serverExternalPackages: ["heic-convert", "libheif-js"],
 };
 
 module.exports = nextConfig;
