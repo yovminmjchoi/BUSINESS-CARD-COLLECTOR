@@ -22,9 +22,11 @@ export interface CardListData {
 export default function CardListItem({
   card,
   thumbUrl,
+  groupCount = 1,
 }: {
   card: CardListData;
   thumbUrl: string | null;
+  groupCount?: number;
 }) {
   const name = card.name_ko || card.name_en || "(이름 없음)";
   const company = card.company_ko || card.company_en || "";
@@ -55,6 +57,11 @@ export default function CardListItem({
           {card.status === "review_needed" && (
             <span className="flex-shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
               검토
+            </span>
+          )}
+          {groupCount > 1 && (
+            <span className="flex-shrink-0 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+              외 {groupCount - 1}장
             </span>
           )}
         </div>

@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const { data } = await supabase
     .from("cards")
     .select(
-      "id,name_ko,name_en,company_ko,company_en,company_normalized,title_ko,title_en,email,mobile",
+      "id,person_id,name_ko,name_en,company_ko,company_en,company_normalized,title_ko,title_en,email,mobile",
     );
 
   const candidates = [];
@@ -88,6 +88,7 @@ export async function POST(request: Request) {
     if (reasons.length > 0) {
       candidates.push({
         id: c.id,
+        personId: c.person_id,
         name: c.name_ko || c.name_en || "(이름 없음)",
         company: c.company_ko || c.company_en || "",
         title: c.title_ko || c.title_en || "",

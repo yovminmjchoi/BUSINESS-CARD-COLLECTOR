@@ -37,16 +37,25 @@ export interface CardEdit {
   edited_at: string;
 }
 
+export interface OtherCard {
+  id: string;
+  company: string;
+  title: string;
+  createdAt: string;
+}
+
 export default function CardDetail({
   card,
   edits,
   initialTagIds,
+  otherCards,
   frontUrl,
   backUrl,
 }: {
   card: Record<string, string | null>;
   edits: CardEdit[];
   initialTagIds: string[];
+  otherCards: OtherCard[];
   frontUrl: string | null;
   backUrl: string | null;
 }) {
@@ -140,6 +149,32 @@ export default function CardDetail({
           alt="명함 뒷면"
           className="w-full rounded-lg border border-gray-200 object-contain"
         />
+      )}
+
+      {otherCards.length > 0 && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-1 text-xs font-medium text-gray-500">
+            경력 이력 (같은 사람 명함 {otherCards.length}장)
+          </div>
+          <ul className="flex flex-col gap-1">
+            {otherCards.map((o) => (
+              <li key={o.id}>
+                <Link
+                  href={`/card/${o.id}`}
+                  className="flex justify-between gap-2 text-sm text-gray-700"
+                >
+                  <span className="truncate">
+                    {o.company}
+                    {o.title ? ` · ${o.title}` : ""}
+                  </span>
+                  <span className="flex-shrink-0 text-xs text-gray-400">
+                    {new Date(o.createdAt).toLocaleDateString("ko-KR")}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <div className="flex flex-col gap-3">

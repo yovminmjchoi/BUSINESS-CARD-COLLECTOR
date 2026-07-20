@@ -4,6 +4,7 @@ import Link from "next/link";
 
 export interface DupCandidate {
   id: string;
+  personId: string;
   name: string;
   company: string;
   title: string;
@@ -15,11 +16,13 @@ export default function DuplicateWarning({
   busy,
   onMerge,
   onOverwrite,
+  onLinkPerson,
 }: {
   candidates: DupCandidate[];
   busy: boolean;
   onMerge: (id: string) => void;
   onOverwrite: (id: string) => void;
+  onLinkPerson: (personId: string) => void;
 }) {
   if (candidates.length === 0) return null;
 
@@ -50,23 +53,33 @@ export default function DuplicateWarning({
                   기존 보기
                 </Link>
               </div>
-              <div className="mt-2 flex gap-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => onMerge(c.id)}
+                  onClick={() => onLinkPerson(c.personId)}
                   disabled={busy}
                   className="flex-1 rounded-lg bg-amber-600 px-2 py-1.5 text-sm font-medium text-white disabled:opacity-50"
                 >
-                  병합 (빈 칸 채우기)
+                  같은 사람 (새 명함·이력 연결)
                 </button>
-                <button
-                  type="button"
-                  onClick={() => onOverwrite(c.id)}
-                  disabled={busy}
-                  className="flex-1 rounded-lg border border-amber-600 px-2 py-1.5 text-sm font-medium text-amber-700 disabled:opacity-50"
-                >
-                  덮어쓰기
-                </button>
+                <div className="flex w-full gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onMerge(c.id)}
+                    disabled={busy}
+                    className="flex-1 rounded-lg border border-amber-600 px-2 py-1.5 text-sm text-amber-700 disabled:opacity-50"
+                  >
+                    병합
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOverwrite(c.id)}
+                    disabled={busy}
+                    className="flex-1 rounded-lg border border-amber-600 px-2 py-1.5 text-sm text-amber-700 disabled:opacity-50"
+                  >
+                    덮어쓰기
+                  </button>
+                </div>
               </div>
             </div>
           );

@@ -104,7 +104,8 @@ export default function ReviewPage() {
     setForm((f) => ({ ...f, [key]: value === "" ? null : value }));
   }
 
-  async function handleSave() {
+  // personId 지정 시 같은 사람으로 연결(새 명함), 없으면 독립 새 명함
+  async function handleSave(personId?: string) {
     if (!draft) return;
     setSaving(true);
     setSaveError("");
@@ -120,6 +121,7 @@ export default function ReviewPage() {
           personNote,
           companyNote,
           tagIds,
+          personId: personId ?? null,
         }),
       });
       const data = await res.json();
@@ -202,6 +204,7 @@ export default function ReviewPage() {
         busy={saving}
         onMerge={(id) => saveToExisting(id, true)}
         onOverwrite={(id) => saveToExisting(id, false)}
+        onLinkPerson={(personId) => handleSave(personId)}
       />
 
       {imageUrl && (
@@ -262,7 +265,7 @@ export default function ReviewPage() {
 
       <button
         type="button"
-        onClick={handleSave}
+        onClick={() => handleSave()}
         disabled={saving}
         className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
       >

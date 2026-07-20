@@ -20,6 +20,7 @@ interface SaveBody {
   personNote?: string | null;
   companyNote?: string | null;
   tagIds?: string[];
+  personId?: string | null; // 같은 사람으로 연결 시 기존 명함의 person_id
 }
 
 function clean(v: unknown): string | null {
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
     .from("cards")
     .insert({
       owner_id: user.id,
+      ...(body.personId ? { person_id: body.personId } : {}),
       status,
       name_ko: clean(v.name_ko),
       name_en: clean(v.name_en),

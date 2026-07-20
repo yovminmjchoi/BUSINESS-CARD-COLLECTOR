@@ -46,7 +46,7 @@ export default async function ListPage({
   let query = supabase
     .from("cards")
     .select(
-      "id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,card_tags(tags(id,name,color))",
+      "id,person_id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,card_tags(tags(id,name,color))",
     );
 
   if (status === "review_needed" || status === "confirmed") {
@@ -84,9 +84,11 @@ export default async function ListPage({
   const { data } = await query;
 
   type Row = Omit<CardListData, "tags"> & {
+    person_id: string;
     card_tags: { tags: CardListTag | CardListTag[] | null }[] | null;
   };
-  const cards: CardListData[] = ((data ?? []) as unknown as Row[]).map((row) => ({
+  const rows = (data ?? []) as unknown as Row[];
+  const cards: CardListData[] = rows.map((row) => ({
     id: row.id,
     name_ko: row.name_ko,
     name_en: row.name_en,
@@ -102,6 +104,15 @@ export default async function ListPage({
       return Array.isArray(tg) ? tg : [tg];
     }),
   }));
+
+  // 같은 사람(person_id) 명함 개수 — "외 N장" 표시용
+  const { data: allPersonIds } = await supabase.from("cards").select("person_id");
+  const personCount = new Map<string, number>();
+  for (const r of (allPersonIds ?? []) as { person_id: string }[]) {
+    personCount.set(r.person_id, (personCount.get(r.person_id) ?? 0) + 1);
+  }
+  const cardPersonId = new Map<string, string>();
+  rows.forEach((r) => cardPersonId.set(r.id, r.person_id));
 
   const { data: allTags } = await supabase
     .from("tags")
@@ -155,6 +166,7 @@ export default async function ListPage({
               <CardListItem
                 card={card}
                 thumbUrl={card.image_front_path ? thumbMap.get(card.image_front_path) ?? null : null}
+                groupCount={personCount.get(cardPersonId.get(card.id) ?? "") ?? 1}
               />
             </li>
           ))}
