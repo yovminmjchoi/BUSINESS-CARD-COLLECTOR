@@ -64,12 +64,20 @@ export async function PATCH(
       : incoming;
   }
   update.email = update.email ? update.email.toLowerCase() : null;
-  // 표시용 전체 이름은 성/이름으로 재합성 (편집 폼엔 성/이름만 있으므로)
+  // 표시용 전체 이름은 성/이름으로 재합성 (편집 폼엔 성/이름만 있으므로).
+  // 편집 폼이 성/이름 키를 보내면(=사용자가 그 칸을 편집) 비웠을 때 실제로 비워지도록
+  // 기존 name_ko 로 되돌리지 않는다. merge(병합)이거나 그 키가 아예 없을 때만 기존값 유지.
+  const koEdited = "family_name_ko" in values || "given_name_ko" in values;
+  const enEdited = "family_name_en" in values || "given_name_en" in values;
   update.name_ko = composeNameKo(
-    update.family_name_ko, update.given_name_ko, existing.name_ko as string | null,
+    update.family_name_ko,
+    update.given_name_ko,
+    merge || !koEdited ? (existing.name_ko as string | null) : null,
   );
   update.name_en = composeNameEn(
-    update.family_name_en, update.given_name_en, existing.name_en as string | null,
+    update.family_name_en,
+    update.given_name_en,
+    merge || !enEdited ? (existing.name_en as string | null) : null,
   );
   const companyNormalized = pickCompanyNormalized(
     update.company_ko,
