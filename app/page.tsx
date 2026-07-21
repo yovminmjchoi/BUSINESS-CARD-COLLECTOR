@@ -2,10 +2,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import SearchBar from "@/components/SearchBar";
 import FilterChips from "@/components/FilterChips";
-import CardListItem, {
+import {
   type CardListData,
   type CardListTag,
 } from "@/components/CardListItem";
+import CardList from "@/components/CardList";
 import TagFilter from "@/components/TagFilter";
 import TabBar from "@/components/TabBar";
 
@@ -202,17 +203,15 @@ export default async function ListPage({
           {!q && !status && <p className="text-sm">아래 + 버튼으로 첫 명함을 촬영하세요.</p>}
         </div>
       ) : (
-        <ul>
-          {displayCards.map((card) => (
-            <li key={card.id}>
-              <CardListItem
-                card={card}
-                thumbUrl={card.image_front_path ? thumbMap.get(card.image_front_path) ?? null : null}
-                groupCount={personCount.get(cardPersonId.get(card.id) ?? "") ?? 1}
-              />
-            </li>
-          ))}
-        </ul>
+        <CardList
+          entries={displayCards.map((card) => ({
+            card,
+            thumbUrl: card.image_front_path
+              ? thumbMap.get(card.image_front_path) ?? null
+              : null,
+            groupCount: personCount.get(cardPersonId.get(card.id) ?? "") ?? 1,
+          }))}
+        />
       )}
 
       {/* 촬영 FAB */}

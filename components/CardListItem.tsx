@@ -23,21 +23,34 @@ export default function CardListItem({
   card,
   thumbUrl,
   groupCount = 1,
+  selectMode = false,
+  selected = false,
+  onToggle,
 }: {
   card: CardListData;
   thumbUrl: string | null;
   groupCount?: number;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
 }) {
   const name = card.name_ko || card.name_en || "(이름 없음)";
   const company = card.company_ko || card.company_en || "";
   const title = card.title_ko || card.title_en || "";
   const sub = [company, title].filter(Boolean).join(" · ");
 
-  return (
-    <Link
-      href={`/card/${card.id}`}
-      className="flex items-center gap-3 border-b border-gray-100 px-4 py-3 active:bg-gray-50"
-    >
+  const inner = (
+    <>
+      {selectMode && (
+        <span
+          className={
+            "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[11px] " +
+            (selected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 text-transparent")
+          }
+        >
+          ✓
+        </span>
+      )}
       {thumbUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -85,6 +98,23 @@ export default function CardListItem({
           </div>
         )}
       </div>
+    </>
+  );
+
+  const cls =
+    "flex w-full items-center gap-3 border-b border-gray-100 px-4 py-3 text-left active:bg-gray-50 " +
+    (selected ? "bg-blue-50" : "");
+
+  if (selectMode) {
+    return (
+      <button type="button" onClick={onToggle} className={cls}>
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={`/card/${card.id}`} className={cls}>
+      {inner}
     </Link>
   );
 }
