@@ -76,6 +76,11 @@ export default function CardDetail({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
+  const [reanalyzed, setReanalyzed] = useState<{
+    filled: number;
+    labels: string[];
+    hasBack: boolean;
+  } | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
@@ -192,16 +197,35 @@ export default function CardDetail({
     if (!confirm("사진으로 다시 인식해 빈 칸을 채울까요? (이미 입력된 값은 유지됩니다)")) return;
     setImgBusy(true);
     setMessage("");
+    setReanalyzed(null);
     try {
       const res = await fetch(`/api/cards/${card.id}/reanalyze`, { method: "POST" });
       const d = await res.json();
-      if (res.ok) {
-        setMessage(d.filled > 0 ? `${d.filled}개 항목을 채웠습니다.` : "채울 빈 칸이 없었습니다.");
-        window.location.reload();
-      } else {
+      if (!res.ok) {
         setMessage(d.error ?? "다시 인식 실패");
         setImgBusy(false);
+        return;
       }
+      // 반환된 값을 폼의 빈 칸에만 병합 (리로드 없이 즉시 반영 → 무엇이 채워졌는지 보임).
+      const vals = (d.values ?? {}) as Record<string, string | null>;
+      const filledLabels: string[] = [];
+      setForm((prev) => {
+        const next = { ...prev };
+        for (const f of FIELDS) {
+          const v = vals[f.key];
+          if (typeof v === "string" && v.trim() !== "" && !next[f.key].trim()) {
+            next[f.key] = v.trim();
+            filledLabels.push(f.label);
+          }
+        }
+        return next;
+      });
+      setReanalyzed({
+        filled: d.filled ?? 0,
+        labels: filledLabels,
+        hasBack: Boolean(backUrl),
+      });
+      setImgBusy(false);
     } catch {
       setMessage("네트워크 오류. 다시 시도하세요.");
       setImgBusy(false);
@@ -403,6 +427,30 @@ export default function CardDetail({
       </div>
 
       <TagSelector value={tagIds} onChange={setTagIds} />
+
+      {reanalyzed && (
+        <div
+          className={
+            "rounded-lg p-3 text-sm " +
+            (reanalyzed.labels.length > 0
+              ? "bg-green-50 text-green-800"
+              : "bg-amber-50 text-amber-800")
+          }
+        >
+          {reanalyzed.labels.length > 0 ? (
+            <>
+              <div className="font-medium">
+                ✓ {reanalyzed.labels.length}개 항목을 채웠어요{reanalyzed.hasBack ? " (앞·뒷면)" : ""}. 확인 후 아래 저장을 누르세요.
+              </div>
+              <div className="mt-1 text-xs">{reanalyzed.labels.join(", ")}</div>
+            </>
+          ) : (
+            <div className="font-medium">
+              새로 채운 항목이 없어요 — 빈 칸이 없거나 사진에서 더 읽을 내용이 없습니다{reanalyzed.hasBack ? " (뒷면 포함해 확인함)" : ""}.
+            </div>
+          )}
+        </div>
+      )}
 
       {message && <p className="text-center text-sm text-gray-600">{message}</p>}
 

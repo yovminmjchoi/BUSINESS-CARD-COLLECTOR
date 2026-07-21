@@ -123,5 +123,6 @@ export async function POST(
     await supabase.from("card_edits").insert(edits);
   }
 
-  return NextResponse.json({ ok: true, filled: edits.length });
+  // 채운 필드 값을 반환 → 클라이언트가 리로드 없이 폼에 즉시 반영.
+  return NextResponse.json({ ok: true, filled: edits.length, values: update });
 }
