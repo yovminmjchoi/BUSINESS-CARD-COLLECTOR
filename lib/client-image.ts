@@ -53,6 +53,20 @@ export async function cropBboxToBlob(
   return canvasToJpeg(canvas);
 }
 
+// 이미지를 시계방향 90° 회전한 data URL 반환 (크롭 화면 방향 조정용)
+export async function rotate90(src: string): Promise<string> {
+  const img = await loadImage(src);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalHeight;
+  canvas.height = img.naturalWidth;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no canvas");
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(Math.PI / 2);
+  ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+  return canvas.toDataURL("image/jpeg", 0.9);
+}
+
 export function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(

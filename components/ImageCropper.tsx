@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
-import { canvasToJpeg } from "@/lib/client-image";
+import ReactCrop, { type Crop } from "react-image-crop";
+import { canvasToJpeg, rotate90 } from "@/lib/client-image";
 
 // AI 가 감지한 명함 영역 [x0,y0,x1,y1] (0~1). 도착하면 크롭 박스를 자동으로 맞춤.
 export interface SuggestedBox {
@@ -27,6 +27,7 @@ export default function ImageCropper({
   cancelLabel?: string;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
+  const [displaySrc, setDisplaySrc] = useState(src);
   const [crop, setCrop] = useState<Crop>({
     unit: "%",
     x: 4,
@@ -34,9 +35,20 @@ export default function ImageCropper({
     width: 92,
     height: 92,
   });
-  const [pixelCrop, setPixelCrop] = useState<PixelCrop | null>(null);
   const [busy, setBusy] = useState(false);
   const touchedRef = useRef(false); // 사용자가 박스를 만졌는지
+
+  async function rotate() {
+    setBusy(true);
+    try {
+      const rotated = await rotate90(displaySrc);
+      setDisplaySrc(rotated);
+      touchedRef.current = true; // 회전 후엔 자동 제안 박스 무시
+      setCrop({ unit: "%", x: 4, y: 4, width: 92, height: 92 });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // AI 감지 박스 도착 시, 사용자가 아직 안 만졌으면 자동 스냅 (여유 3%)
   useEffect(() => {
@@ -47,7 +59,6 @@ export default function ImageCropper({
     const x1 = Math.min(1, suggested.x1 + M) * 100;
     const y1 = Math.min(1, suggested.y1 + M) * 100;
     setCrop({ unit: "%", x, y, width: Math.max(5, x1 - x), height: Math.max(5, y1 - y) });
-    setPixelCrop(null);
   }, [suggested]);
 
   async function apply() {
@@ -55,22 +66,32 @@ export default function ImageCropper({
     if (!img) return;
     setBusy(true);
     try {
-      // 표시 크기 → 원본 픽셀 비율 환산
-      const scaleX = img.naturalWidth / img.width;
-      const scaleY = img.naturalHeight / img.height;
-      const pc = pixelCrop ?? {
-        x: 0, y: 0, width: img.width, height: img.height, unit: "px" as const,
-      };
+      const nW = img.naturalWidth;
+      const nH = img.naturalHeight;
+      // 현재 크롭 박스(crop)를 원본 픽셀로 환산 (단위 %/px 모두 대응)
+      let sx: number, sy: number, sw: number, sh: number;
+      if (crop.unit === "%") {
+        sx = (crop.x / 100) * nW;
+        sy = (crop.y / 100) * nH;
+        sw = (crop.width / 100) * nW;
+        sh = (crop.height / 100) * nH;
+      } else {
+        const kx = nW / img.width;
+        const ky = nH / img.height;
+        sx = crop.x * kx;
+        sy = crop.y * ky;
+        sw = crop.width * kx;
+        sh = crop.height * ky;
+      }
+      if (sw < 1 || sh < 1) {
+        sx = 0; sy = 0; sw = nW; sh = nH; // 박스가 없으면 전체
+      }
       const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(pc.width * scaleX));
-      canvas.height = Math.max(1, Math.round(pc.height * scaleY));
+      canvas.width = Math.max(1, Math.round(sw));
+      canvas.height = Math.max(1, Math.round(sh));
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("no canvas");
-      ctx.drawImage(
-        img,
-        pc.x * scaleX, pc.y * scaleY, pc.width * scaleX, pc.height * scaleY,
-        0, 0, canvas.width, canvas.height,
-      );
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       onApply(await canvasToJpeg(canvas));
     } catch {
       setBusy(false);
@@ -83,6 +104,14 @@ export default function ImageCropper({
         <span className="text-sm font-medium">
           {suggested ? "명함 영역 자동 감지됨 · 필요하면 조절" : "명함 영역을 맞추세요"}
         </span>
+        <button
+          type="button"
+          onClick={rotate}
+          disabled={busy}
+          className="rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
+        >
+          ↻ 회전
+        </button>
       </div>
 
       <div className="flex flex-1 items-center justify-center overflow-hidden p-2">
@@ -92,13 +121,12 @@ export default function ImageCropper({
             touchedRef.current = true;
             setCrop(c);
           }}
-          onComplete={(c) => setPixelCrop(c)}
           keepSelection
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
-            src={src}
+            src={displaySrc}
             alt="크롭 대상"
             className="max-h-[70vh] w-auto max-w-full"
           />
