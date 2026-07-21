@@ -137,23 +137,19 @@ export default function NewCardPage() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={frontUrl} alt="앞면" className="w-full rounded-lg border border-gray-200 object-contain" />
         )}
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <CameraCapture
-              label={frontCropped ? "앞면 다시 찍기" : "앞면 촬영"}
-              onSelect={(f) => pick("front", f)}
-            />
-          </div>
-          {frontFull && (
-            <button
-              type="button"
-              onClick={() => setCrop({ side: "front", url: URL.createObjectURL(frontFull), full: frontFull })}
-              className="rounded-lg border border-gray-300 px-3 text-sm text-gray-700"
-            >
-              다시 크롭
-            </button>
-          )}
-        </div>
+        <CameraCapture
+          label={frontCropped ? "앞면 다시 찍기" : "앞면 촬영"}
+          onSelect={(f) => pick("front", f)}
+        />
+        {frontFull && (
+          <button
+            type="button"
+            onClick={() => setCrop({ side: "front", url: URL.createObjectURL(frontFull), full: frontFull })}
+            className="self-start text-sm text-gray-500 underline"
+          >
+            다시 크롭
+          </button>
+        )}
       </section>
 
       {/* 뒷면 (선택) */}
