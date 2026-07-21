@@ -28,6 +28,30 @@ export function digitsOnly(phone: string | null | undefined): string {
   return (phone ?? "").replace(/\D/g, "");
 }
 
+// 성/이름으로 표시용 전체 이름 합성.
+//   한글: 성+이름 (예: 최+민정 = "최민정")
+//   영문: 이름 성 (예: Minjeong Choi) — 자연스러운 영어 표기
+// 분리값이 없으면 fallback(명함 원문 전체이름)을 사용.
+function tidy(v: string | null | undefined): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+export function composeNameKo(
+  familyKo: string | null | undefined,
+  givenKo: string | null | undefined,
+  fallback?: string | null,
+): string | null {
+  const joined = [tidy(familyKo), tidy(givenKo)].filter(Boolean).join("");
+  return joined || tidy(fallback);
+}
+export function composeNameEn(
+  familyEn: string | null | undefined,
+  givenEn: string | null | undefined,
+  fallback?: string | null,
+): string | null {
+  const joined = [tidy(givenEn), tidy(familyEn)].filter(Boolean).join(" ");
+  return joined || tidy(fallback);
+}
+
 // 트라이그램 Dice 유사도 (pg_trgm 근사). 0~1.
 export function trigramSimilarity(
   a: string | null | undefined,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { pickCompanyNormalized } from "@/lib/normalize";
+import { pickCompanyNormalized, composeNameKo, composeNameEn } from "@/lib/normalize";
 import { extractBusinessCard, type CardImage } from "@/lib/gemini";
 
 export const runtime = "nodejs";
@@ -11,7 +11,6 @@ const BUCKET = "card-images";
 // AI 로 다시 인식 → 빈 칸만 채움(기존 값·사용자 편집 보존) + 회사 정규화 재계산.
 // 처리 규칙(이름 분리 등)이 바뀐 뒤 기존 명함을 최신화할 때 사용.
 const FILL_FIELDS = [
-  "name_ko", "name_en",
   "family_name_ko", "given_name_ko", "family_name_en", "given_name_en",
   "company_ko", "company_en", "department",
   "title_ko", "title_en", "mobile", "office_phone", "fax",
@@ -97,6 +96,18 @@ export async function POST(
       });
     }
   }
+
+  // 성/이름이 새로 채워졌으면 표시용 전체 이름도 재합성
+  update.name_ko = composeNameKo(
+    update.family_name_ko ?? card.family_name_ko,
+    update.given_name_ko ?? card.given_name_ko,
+    card.name_ko,
+  );
+  update.name_en = composeNameEn(
+    update.family_name_en ?? card.family_name_en,
+    update.given_name_en ?? card.given_name_en,
+    card.name_en,
+  );
 
   // 회사 정규화는 항상 최신 규칙으로 재계산
   update.company_normalized = pickCompanyNormalized(

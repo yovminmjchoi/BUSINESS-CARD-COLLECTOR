@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { pickCompanyNormalized } from "@/lib/normalize";
+import { pickCompanyNormalized, composeNameKo, composeNameEn } from "@/lib/normalize";
 import type { CardExtraction } from "@/lib/gemini";
 
 export const runtime = "nodejs";
@@ -66,8 +66,8 @@ export async function POST(request: Request) {
       owner_id: user.id,
       ...(body.personId ? { person_id: body.personId } : {}),
       status,
-      name_ko: clean(v.name_ko),
-      name_en: clean(v.name_en),
+      name_ko: composeNameKo(v.family_name_ko, v.given_name_ko, v.name_ko),
+      name_en: composeNameEn(v.family_name_en, v.given_name_en, v.name_en),
       family_name_ko: clean(v.family_name_ko),
       given_name_ko: clean(v.given_name_ko),
       family_name_en: clean(v.family_name_en),

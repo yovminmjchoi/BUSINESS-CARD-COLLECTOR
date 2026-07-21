@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { pickCompanyNormalized } from "@/lib/normalize";
+import { pickCompanyNormalized, composeNameKo, composeNameEn } from "@/lib/normalize";
 
 export const runtime = "nodejs";
 
@@ -64,6 +64,13 @@ export async function PATCH(
       : incoming;
   }
   update.email = update.email ? update.email.toLowerCase() : null;
+  // 표시용 전체 이름은 성/이름으로 재합성 (편집 폼엔 성/이름만 있으므로)
+  update.name_ko = composeNameKo(
+    update.family_name_ko, update.given_name_ko, existing.name_ko as string | null,
+  );
+  update.name_en = composeNameEn(
+    update.family_name_en, update.given_name_en, existing.name_en as string | null,
+  );
   const companyNormalized = pickCompanyNormalized(
     update.company_ko,
     update.company_en,

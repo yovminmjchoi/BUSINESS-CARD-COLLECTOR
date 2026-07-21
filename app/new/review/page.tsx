@@ -17,10 +17,8 @@ interface Draft {
 
 // 편집 폼에 노출할 필드 (순서·라벨)
 const FIELDS: { key: keyof CardExtraction; label: string }[] = [
-  { key: "name_ko", label: "이름 (한글)" },
   { key: "family_name_ko", label: "성 (한글)" },
   { key: "given_name_ko", label: "이름 (한글)" },
-  { key: "name_en", label: "이름 (영문)" },
   { key: "family_name_en", label: "성 (영문)" },
   { key: "given_name_en", label: "이름 (영문)" },
   { key: "company_ko", label: "회사 (한글)" },
