@@ -64,6 +64,24 @@ export default function BatchNewPage() {
       );
       setItems(built);
       setPhase("review");
+
+      // 같은 회사면 기존 태그 자동 제안 (대표: 회사명이 있는 첫 명함)
+      const withCompany = cards.find((c) => c.company_ko || c.company_en);
+      if (withCompany) {
+        fetch("/api/company-tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyKo: withCompany.company_ko,
+            companyEn: withCompany.company_en,
+          }),
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            if (Array.isArray(d.tagIds) && d.tagIds.length > 0) setTagIds(d.tagIds);
+          })
+          .catch(() => {});
+      }
     } catch {
       setError("처리 중 오류가 발생했습니다. 다시 시도하세요.");
       setPhase("capture");

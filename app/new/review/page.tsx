@@ -84,6 +84,18 @@ export default function ReviewPage() {
         .then((r) => r.json())
         .then((d) => setCandidates(d.candidates ?? []))
         .catch(() => setCandidates([]));
+
+      // 같은 회사면 기존 태그 자동 제안
+      fetch("/api/company-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyKo: ex.company_ko, companyEn: ex.company_en }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d.tagIds) && d.tagIds.length > 0) setTagIds(d.tagIds);
+        })
+        .catch(() => {});
     }
 
     // 비공개 버킷 이미지 → 서명 URL (RLS: 소유자만)
