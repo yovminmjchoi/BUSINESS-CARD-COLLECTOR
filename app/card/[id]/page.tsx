@@ -65,6 +65,7 @@ export default async function CardDetailPage({
       edits={(edits ?? []) as CardEdit[]}
       initialTagIds={tagIds}
       otherCards={otherCards}
+      isPrimary={card.is_primary === true}
       frontUrl={frontUrl}
       backUrl={backUrl}
     />

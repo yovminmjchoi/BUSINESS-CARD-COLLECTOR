@@ -49,6 +49,7 @@ export default function CardDetail({
   edits,
   initialTagIds,
   otherCards,
+  isPrimary,
   frontUrl,
   backUrl,
 }: {
@@ -56,6 +57,7 @@ export default function CardDetail({
   edits: CardEdit[];
   initialTagIds: string[];
   otherCards: OtherCard[];
+  isPrimary: boolean;
   frontUrl: string | null;
   backUrl: string | null;
 }) {
@@ -71,6 +73,22 @@ export default function CardDetail({
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState(false);
+
+  async function handleSetPrimary() {
+    setSettingPrimary(true);
+    try {
+      const res = await fetch(`/api/cards/${card.id}/primary`, { method: "POST" });
+      if (res.ok) {
+        router.refresh();
+      } else {
+        const d = await res.json();
+        setMessage(d.error ?? "지정 실패");
+      }
+    } finally {
+      setSettingPrimary(false);
+    }
+  }
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -153,8 +171,24 @@ export default function CardDetail({
 
       {otherCards.length > 0 && (
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <div className="mb-1 text-xs font-medium text-gray-500">
-            경력 이력 (같은 사람 명함 {otherCards.length}장)
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-gray-500">
+              경력 이력 (같은 사람 명함 {otherCards.length}장)
+            </span>
+            {isPrimary ? (
+              <span className="flex-shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
+                현재 명함
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSetPrimary}
+                disabled={settingPrimary}
+                className="flex-shrink-0 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-medium text-indigo-700 disabled:opacity-50"
+              >
+                현재 명함으로 지정
+              </button>
+            )}
           </div>
           <ul className="flex flex-col gap-1">
             {otherCards.map((o) => (

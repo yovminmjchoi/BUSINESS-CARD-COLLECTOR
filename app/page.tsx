@@ -46,7 +46,7 @@ export default async function ListPage({
   let query = supabase
     .from("cards")
     .select(
-      "id,person_id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,card_tags(tags(id,name,color))",
+      "id,person_id,is_primary,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,card_tags(tags(id,name,color))",
     );
 
   if (status === "review_needed" || status === "confirmed") {
@@ -85,6 +85,7 @@ export default async function ListPage({
 
   type Row = Omit<CardListData, "tags"> & {
     person_id: string;
+    is_primary: boolean;
     card_tags: { tags: CardListTag | CardListTag[] | null }[] | null;
   };
   const rows = (data ?? []) as unknown as Row[];
@@ -112,10 +113,15 @@ export default async function ListPage({
     personCount.set(r.person_id, (personCount.get(r.person_id) ?? 0) + 1);
   }
   const cardPersonId = new Map<string, string>();
-  rows.forEach((r) => cardPersonId.set(r.id, r.person_id));
+  const cardPrimary = new Map<string, boolean>();
+  rows.forEach((r) => {
+    cardPersonId.set(r.id, r.person_id);
+    cardPrimary.set(r.id, r.is_primary === true);
+  });
 
-  // 같은 사람 명함을 한 줄로 접기: 대표 = 정렬상 첫(=기본 최근순이면 최신) 명함.
-  // 태그는 그 사람의 (현재 화면에 보이는) 카드들 것을 합쳐서 대표에 표시.
+  // 같은 사람 명함을 한 줄로 접기.
+  //   대표 = "현재 명함" 지정(is_primary)이 있으면 그것, 없으면 정렬상 첫(기본 최근 등록순).
+  //   태그는 그 사람의 (현재 화면에 보이는) 카드들 것을 합쳐서 대표에 표시.
   const personTagMap = new Map<string, Map<string, CardListTag>>();
   for (const c of cards) {
     const pid = cardPersonId.get(c.id) ?? c.id;
@@ -126,17 +132,20 @@ export default async function ListPage({
     }
     for (const t of c.tags) m.set(t.id, t);
   }
-  const seenPerson = new Set<string>();
-  const displayCards: CardListData[] = [];
+  const repByPerson = new Map<string, CardListData>();
   for (const c of cards) {
     const pid = cardPersonId.get(c.id) ?? c.id;
-    if (seenPerson.has(pid)) continue;
-    seenPerson.add(pid);
-    displayCards.push({
-      ...c,
-      tags: [...(personTagMap.get(pid)?.values() ?? [])],
-    });
+    const rep = repByPerson.get(pid);
+    if (!rep) {
+      repByPerson.set(pid, c); // 첫 등장(정렬 순서 유지)
+    } else if (cardPrimary.get(c.id) && !cardPrimary.get(rep.id)) {
+      repByPerson.set(pid, c); // 지정된 현재 명함이 우선 (Map 키 위치는 유지)
+    }
   }
+  const displayCards: CardListData[] = [...repByPerson.values()].map((c) => ({
+    ...c,
+    tags: [...(personTagMap.get(cardPersonId.get(c.id) ?? c.id)?.values() ?? [])],
+  }));
 
   const { data: allTags } = await supabase
     .from("tags")
