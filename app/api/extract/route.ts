@@ -1,14 +1,19 @@
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { toResizedJpeg } from "@/lib/image";
 import { extractBusinessCard, type CardImage } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const BUCKET = "card-images";
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// 콜드스타트 워밍업용 (촬영 화면 진입 시 미리 호출)
+export async function GET() {
+  return NextResponse.json({ ok: true });
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -32,24 +37,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "앞면 이미지가 필요합니다." }, { status: 400 });
   }
 
-  // 리사이즈
+  // 클라이언트에서 축소·크롭을 이미 거친 경우(front_cropped=1):
+  // 서버 재인코딩 없이 그대로 사용 (sharp/HEIC 로드 자체를 생략 → 빠름)
+  const clientCropped = form.get("front_cropped") === "1";
+
   let frontJpeg: Buffer;
   let backJpeg: Buffer | null = null;
   try {
-    frontJpeg = await toResizedJpeg(front);
-    if (back instanceof File && back.size > 0) {
-      backJpeg = await toResizedJpeg(back);
+    if (clientCropped) {
+      frontJpeg = Buffer.from(await front.arrayBuffer());
+      if (back instanceof File && back.size > 0) {
+        backJpeg = Buffer.from(await back.arrayBuffer());
+      }
+    } else {
+      const { toResizedJpeg } = await import("@/lib/image");
+      frontJpeg = await toResizedJpeg(front);
+      if (back instanceof File && back.size > 0) {
+        backJpeg = await toResizedJpeg(back);
+      }
     }
   } catch {
     return NextResponse.json({ error: "이미지 처리에 실패했습니다." }, { status: 400 });
   }
 
-  const draftId = randomUUID();
+  // 재추출(뒷면 추가 등) 시 같은 draftId 재사용 → 파일 덮어쓰기, 고아 파일 방지
+  const draftIdRaw = String(form.get("draftId") ?? "");
+  const draftId = UUID_RE.test(draftIdRaw) ? draftIdRaw : randomUUID();
   const basePath = `${user.id}/${draftId}`;
   const imageFrontPath = `${basePath}/front.jpg`;
   const imageBackPath = backJpeg ? `${basePath}/back.jpg` : null;
 
-  // 1) Gemini 추출 먼저 (card_bbox 포함)
   const images: CardImage[] = [
     { data: frontJpeg.toString("base64"), mimeType: "image/jpeg" },
   ];
@@ -57,49 +74,58 @@ export async function POST(request: Request) {
     images.push({ data: backJpeg.toString("base64"), mimeType: "image/jpeg" });
   }
 
-  let extraction = null;
-  let extractErr: string | null = null;
-  try {
-    extraction = await extractBusinessCard(images);
-  } catch (err) {
-    extractErr = err instanceof Error ? err.message : "추출에 실패했습니다.";
-  }
+  // Gemini 추출 시작 (업로드와 병렬)
+  const extractPromise = extractBusinessCard(images)
+    .then((e) => ({ extraction: e, extractErr: null as string | null }))
+    .catch((err) => ({
+      extraction: null,
+      extractErr: err instanceof Error ? err.message : "추출에 실패했습니다.",
+    }));
 
-  // 2) bbox 가 있으면 앞면에서 명함 영역만 크롭 (여유 4%)
-  //    사용자가 크롭 화면을 거친 경우(front_cropped=1)는 이중 크롭 방지 위해 생략
-  const clientCropped = form.get("front_cropped") === "1";
-  let frontOut = frontJpeg;
-  if (!clientCropped && extraction?.card_bbox) {
-    try {
-      frontOut = await cropByBbox(frontJpeg, extraction.card_bbox);
-    } catch {
-      // 크롭 실패는 무시하고 원본 저장
-    }
-  }
-
-  // 3) Storage 업로드 (앞/뒷면 병렬)
-  const uploads = [
+  const uploadFront = (buf: Buffer) =>
     supabase.storage
       .from(BUCKET)
-      .upload(imageFrontPath, frontOut, { contentType: "image/jpeg", upsert: true }),
-  ];
-  if (backJpeg && imageBackPath) {
-    uploads.push(
-      supabase.storage
-        .from(BUCKET)
-        .upload(imageBackPath, backJpeg, { contentType: "image/jpeg", upsert: true }),
-    );
+      .upload(imageFrontPath, buf, { contentType: "image/jpeg", upsert: true });
+  const uploadBack = () =>
+    backJpeg && imageBackPath
+      ? supabase.storage
+          .from(BUCKET)
+          .upload(imageBackPath, backJpeg, { contentType: "image/jpeg", upsert: true })
+      : Promise.resolve({ error: null });
+
+  let extraction: Awaited<typeof extractPromise>["extraction"] = null;
+  let extractErr: string | null = null;
+  let frontUploadError: unknown = null;
+
+  if (clientCropped) {
+    // 완전 병렬: 사용자가 이미 크롭했으므로 저장본이 추출 결과와 무관
+    const [ex, fu] = await Promise.all([extractPromise, uploadFront(frontJpeg), uploadBack()]);
+    extraction = ex.extraction;
+    extractErr = ex.extractErr;
+    frontUploadError = fu.error;
+  } else {
+    // 자동 크롭 경로: 추출 → bbox 크롭 → 업로드
+    const ex = await extractPromise;
+    extraction = ex.extraction;
+    extractErr = ex.extractErr;
+    let frontOut = frontJpeg;
+    if (extraction?.card_bbox) {
+      try {
+        const { cropByBbox } = await import("@/lib/image");
+        frontOut = await cropByBbox(frontJpeg, extraction.card_bbox);
+      } catch {
+        // 크롭 실패는 무시하고 원본 저장
+      }
+    }
+    const [fu] = await Promise.all([uploadFront(frontOut), uploadBack()]);
+    frontUploadError = fu.error;
   }
-  const [frontUpload] = await Promise.all(uploads);
-  if (frontUpload.error) {
-    return NextResponse.json(
-      { error: "이미지 업로드에 실패했습니다." },
-      { status: 500 },
-    );
+
+  if (frontUploadError) {
+    return NextResponse.json({ error: "이미지 업로드에 실패했습니다." }, { status: 500 });
   }
 
   if (extractErr) {
-    // 이미지는 저장됐으므로 경로는 돌려주되, 추출 실패를 알림 (수동 입력 가능)
     return NextResponse.json(
       { draftId, imageFrontPath, imageBackPath, extraction: null, error: extractErr },
       { status: 502 },
@@ -107,32 +133,4 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({ draftId, imageFrontPath, imageBackPath, extraction });
-}
-
-// 정규화 bbox([x0,y0,x1,y1], 0~1) 로 명함 영역 크롭. 각 방향 4% 여유.
-async function cropByBbox(
-  jpeg: Buffer,
-  bbox: [number, number, number, number],
-): Promise<Buffer> {
-  const MARGIN = 0.04;
-  const meta = await sharp(jpeg).metadata();
-  const W = meta.width ?? 0;
-  const H = meta.height ?? 0;
-  if (!W || !H) return jpeg;
-
-  const x0 = Math.max(0, bbox[0] - MARGIN);
-  const y0 = Math.max(0, bbox[1] - MARGIN);
-  const x1 = Math.min(1, bbox[2] + MARGIN);
-  const y1 = Math.min(1, bbox[3] + MARGIN);
-
-  const left = Math.round(x0 * W);
-  const top = Math.round(y0 * H);
-  const width = Math.max(1, Math.round((x1 - x0) * W));
-  const height = Math.max(1, Math.round((y1 - y0) * H));
-  if (width < 50 || height < 50) return jpeg; // 오검출 방어
-
-  return sharp(jpeg)
-    .extract({ left, top, width, height })
-    .jpeg({ quality: 85 })
-    .toBuffer();
 }
