@@ -105,6 +105,44 @@ export async function extractBusinessCard(
   return normalizeExtraction(parsed as Record<string, unknown>);
 }
 
+// 한 이미지에 여러 명함이 있을 때: 각 명함을 개별로 추출 (배열).
+export async function extractMultipleCards(
+  image: CardImage,
+): Promise<CardExtraction[]> {
+  const ai = getClient();
+  const prompt =
+    loadPrompt() +
+    `\n\n## 여러 명함 (중요)\n이 이미지에는 명함이 **여러 장** 들어 있을 수 있습니다. 각 명함을 개별로 인식해 아래 형태의 JSON 하나만 출력하세요:\n{"cards": [ <위 스키마의 객체>, <객체>, ... ]}\n- 각 객체의 \`card_bbox\`는 **그 명함**이 이미지에서 차지하는 영역(0~1)이어야 합니다.\n- 명함이 한 장뿐이면 cards 에 한 개만 넣습니다.\n- 명함이 아닌 로고/여백은 넣지 마세요.`;
+
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: image.mimeType, data: image.data } },
+        ],
+      },
+    ],
+    config: { responseMimeType: "application/json", temperature: 0 },
+  });
+
+  const text = response.text;
+  if (!text) throw new Error("Gemini 응답이 비어 있습니다.");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Gemini 응답을 JSON으로 파싱하지 못했습니다.");
+  }
+  const arr = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { cards?: unknown }).cards;
+  if (!Array.isArray(arr)) throw new Error("명함 배열을 찾지 못했습니다.");
+  return arr.map((c) => normalizeExtraction(c as Record<string, unknown>));
+}
+
 // 누락 필드를 null 로 보정하고 타입을 안정화
 function normalizeExtraction(raw: Record<string, unknown>): CardExtraction {
   const str = (v: unknown): string | null =>

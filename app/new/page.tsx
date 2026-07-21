@@ -128,6 +128,9 @@ export default function NewCardPage() {
         <p className="mt-1 text-sm text-gray-500">
           찍으면 명함 영역을 자동으로 잡아줘요. 확인하고 진행하세요.
         </p>
+        <a href="/new/batch" className="mt-2 inline-block text-sm text-blue-600 underline">
+          여러 명함이 한 장(스캔)에 있나요? → 일괄 인식
+        </a>
       </header>
 
       {/* 앞면 */}

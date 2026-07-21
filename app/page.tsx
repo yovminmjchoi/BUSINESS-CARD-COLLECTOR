@@ -27,6 +27,7 @@ export default async function ListPage({
     sort?: string;
     tag?: string;
     done?: string;
+    n?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -43,7 +44,9 @@ export default async function ListPage({
           ? "기존 명함을 덮어썼습니다."
           : sp.done === "primary"
             ? "현재 명함으로 지정했습니다."
-            : null;
+            : sp.done === "batch"
+              ? `${sp.n ?? ""}개 명함을 저장했습니다.`
+              : null;
 
   const supabase = await createClient();
 
