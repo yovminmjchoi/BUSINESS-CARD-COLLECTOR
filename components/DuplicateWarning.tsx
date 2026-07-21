@@ -16,13 +16,15 @@ export default function DuplicateWarning({
   busy,
   onMerge,
   onOverwrite,
-  onLinkPerson,
+  onLinkPrimary,
+  onLinkHistory,
 }: {
   candidates: DupCandidate[];
   busy: boolean;
   onMerge: (id: string) => void;
   onOverwrite: (id: string) => void;
-  onLinkPerson: (personId: string) => void;
+  onLinkPrimary: (personId: string) => void;
+  onLinkHistory: (personId: string) => void;
 }) {
   if (candidates.length === 0) return null;
 
@@ -53,29 +55,37 @@ export default function DuplicateWarning({
                   기존 보기
                 </Link>
               </div>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="mt-2 flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={() => onLinkPerson(c.personId)}
+                  onClick={() => onLinkPrimary(c.personId)}
                   disabled={busy}
-                  className="flex-1 rounded-lg bg-amber-600 px-2 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  className="w-full rounded-lg bg-amber-600 px-2 py-2 text-sm font-medium text-white disabled:opacity-50"
                 >
-                  같은 사람 (새 명함·이력 연결)
+                  같은 사람 · 이 명함을 대표로
                 </button>
-                <div className="flex w-full gap-2">
+                <button
+                  type="button"
+                  onClick={() => onLinkHistory(c.personId)}
+                  disabled={busy}
+                  className="w-full rounded-lg border border-amber-500 px-2 py-2 text-sm font-medium text-amber-700 disabled:opacity-50"
+                >
+                  같은 사람 · 이력만 추가 (대표 유지)
+                </button>
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => onMerge(c.id)}
                     disabled={busy}
-                    className="flex-1 rounded-lg border border-amber-600 px-2 py-1.5 text-sm text-amber-700 disabled:opacity-50"
+                    className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 disabled:opacity-50"
                   >
-                    병합
+                    병합(빈칸 채우기)
                   </button>
                   <button
                     type="button"
                     onClick={() => onOverwrite(c.id)}
                     disabled={busy}
-                    className="flex-1 rounded-lg border border-amber-600 px-2 py-1.5 text-sm text-amber-700 disabled:opacity-50"
+                    className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs text-gray-600 disabled:opacity-50"
                   >
                     덮어쓰기
                   </button>
@@ -87,7 +97,7 @@ export default function DuplicateWarning({
       </div>
 
       <p className="mt-2 text-xs text-amber-800">
-        또는 아래 <b>저장</b>을 누르면 새 명함으로 따로 보관합니다.
+        완전히 <b>다른 사람</b>이면 맨 아래 <b>저장</b>을 누르세요 (별도 명함으로 보관).
       </p>
     </div>
   );

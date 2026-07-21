@@ -48,7 +48,6 @@ export default function ReviewPage() {
   const [personNote, setPersonNote] = useState("");
   const [companyNote, setCompanyNote] = useState("");
   const [tagIds, setTagIds] = useState<string[]>([]);
-  const [setPrimary, setSetPrimary] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [candidates, setCandidates] = useState<DupCandidate[]>([]);
@@ -105,8 +104,9 @@ export default function ReviewPage() {
     setForm((f) => ({ ...f, [key]: value === "" ? null : value }));
   }
 
-  // personId 지정 시 같은 사람으로 연결(새 명함), 없으면 독립 새 명함
-  async function handleSave(personId?: string) {
+  // personId 지정 시 같은 사람으로 연결(새 명함), 없으면 독립 새 명함.
+  // primary=true 면 이 새 명함을 사람 그룹의 대표로.
+  async function handleSave(personId?: string, primary?: boolean) {
     if (!draft) return;
     setSaving(true);
     setSaveError("");
@@ -123,7 +123,7 @@ export default function ReviewPage() {
           companyNote,
           tagIds,
           personId: personId ?? null,
-          setPrimary,
+          setPrimary: primary ?? false,
         }),
       });
       const data = await res.json();
@@ -206,7 +206,8 @@ export default function ReviewPage() {
         busy={saving}
         onMerge={(id) => saveToExisting(id, true)}
         onOverwrite={(id) => saveToExisting(id, false)}
-        onLinkPerson={(personId) => handleSave(personId)}
+        onLinkPrimary={(personId) => handleSave(personId, true)}
+        onLinkHistory={(personId) => handleSave(personId, false)}
       />
 
       {imageUrl && (
@@ -263,17 +264,6 @@ export default function ReviewPage() {
         {form.notes && <div className="mt-1">판독 메모: {form.notes}</div>}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-gray-700">
-        <input
-          type="checkbox"
-          checked={setPrimary}
-          onChange={(e) => setSetPrimary(e.target.checked)}
-          className="h-4 w-4"
-        />
-        이 명함을 현재(대표) 명함으로 지정
-        <span className="text-xs text-gray-400">(같은 사람 여러 장일 때 목록 대표)</span>
-      </label>
-
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}
 
       <button
@@ -282,7 +272,11 @@ export default function ReviewPage() {
         disabled={saving}
         className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
       >
-        {saving ? "저장 중…" : "저장"}
+        {saving
+          ? "저장 중…"
+          : candidates.length > 0
+            ? "새 명함으로 따로 저장 (다른 사람)"
+            : "저장"}
       </button>
     </main>
   );
