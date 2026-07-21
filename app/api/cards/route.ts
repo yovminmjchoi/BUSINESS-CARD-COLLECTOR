@@ -21,6 +21,7 @@ interface SaveBody {
   companyNote?: string | null;
   tagIds?: string[];
   personId?: string | null; // 같은 사람으로 연결 시 기존 명함의 person_id
+  setPrimary?: boolean; // 이 명함을 사람 그룹의 현재(대표) 명함으로
 }
 
 function clean(v: unknown): string | null {
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
       extraction_notes: clean(body.extraction?.notes),
       extraction_raw: body.extraction ?? null,
     })
-    .select("id")
+    .select("id,person_id")
     .single();
 
   if (insertError || !inserted) {
@@ -128,6 +129,18 @@ export async function POST(request: Request) {
     await supabase.from("card_tags").insert(
       body.tagIds.map((tagId) => ({ card_id: inserted.id, tag_id: tagId })),
     );
+  }
+
+  // 현재(대표) 명함 지정: 같은 사람의 나머지 해제 후 이 명함만 지정
+  if (body.setPrimary) {
+    await supabase
+      .from("cards")
+      .update({ is_primary: false })
+      .eq("person_id", inserted.person_id);
+    await supabase
+      .from("cards")
+      .update({ is_primary: true })
+      .eq("id", inserted.id);
   }
 
   return NextResponse.json({ id: inserted.id, status });

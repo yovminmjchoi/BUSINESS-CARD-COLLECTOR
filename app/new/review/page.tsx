@@ -48,6 +48,7 @@ export default function ReviewPage() {
   const [personNote, setPersonNote] = useState("");
   const [companyNote, setCompanyNote] = useState("");
   const [tagIds, setTagIds] = useState<string[]>([]);
+  const [setPrimary, setSetPrimary] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [candidates, setCandidates] = useState<DupCandidate[]>([]);
@@ -122,6 +123,7 @@ export default function ReviewPage() {
           companyNote,
           tagIds,
           personId: personId ?? null,
+          setPrimary,
         }),
       });
       const data = await res.json();
@@ -260,6 +262,17 @@ export default function ReviewPage() {
         <div>언어: {form.language ?? "-"} · 확신도: {form.confidence ?? "-"}</div>
         {form.notes && <div className="mt-1">판독 메모: {form.notes}</div>}
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-gray-700">
+        <input
+          type="checkbox"
+          checked={setPrimary}
+          onChange={(e) => setSetPrimary(e.target.checked)}
+          className="h-4 w-4"
+        />
+        이 명함을 현재(대표) 명함으로 지정
+        <span className="text-xs text-gray-400">(같은 사람 여러 장일 때 목록 대표)</span>
+      </label>
 
       {saveError && <p className="text-sm text-red-600">{saveError}</p>}
 

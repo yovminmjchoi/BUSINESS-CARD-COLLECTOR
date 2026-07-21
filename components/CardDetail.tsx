@@ -80,7 +80,9 @@ export default function CardDetail({
     try {
       const res = await fetch(`/api/cards/${card.id}/primary`, { method: "POST" });
       if (res.ok) {
+        // 목록의 대표 카드가 즉시 반영되도록 캐시 무효화 후 이동
         router.refresh();
+        router.push("/?done=primary");
       } else {
         const d = await res.json();
         setMessage(d.error ?? "지정 실패");

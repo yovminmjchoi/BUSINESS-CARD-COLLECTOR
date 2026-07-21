@@ -39,7 +39,9 @@ export default async function ListPage({
         ? "기존 명함에 병합되었습니다."
         : sp.done === "updated"
           ? "기존 명함을 덮어썼습니다."
-          : null;
+          : sp.done === "primary"
+            ? "현재 명함으로 지정했습니다."
+            : null;
 
   const supabase = await createClient();
 
