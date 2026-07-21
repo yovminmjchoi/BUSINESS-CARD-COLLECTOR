@@ -33,14 +33,8 @@ export default function NewCardPage() {
     fetch("/api/extract").catch(() => {});
   }, []);
 
-  // 인식 완료 → 자동으로 확인 화면 이동 (뒷면 작업 중이면 대기)
-  useEffect(() => {
-    if (extract.state === "done" && extract.data && !cropTarget && !navigatedRef.current) {
-      navigatedRef.current = true;
-      sessionStorage.setItem("cardDraft", JSON.stringify(extract.data));
-      router.push("/new/review");
-    }
-  }, [extract, cropTarget, router]);
+  // 자동 이동은 하지 않음(뒷면 추가 여지). 인식은 백그라운드로 돌고,
+  // 완료되면 '결과 확인' 버튼이 즉시 활성화 → 사용자가 눌러서 이동.
 
   function setImage(side: Side, file: File) {
     const url = URL.createObjectURL(file);
@@ -135,7 +129,8 @@ export default function NewCardPage() {
       <header>
         <h1 className="text-xl font-bold">명함 촬영</h1>
         <p className="mt-1 text-sm text-gray-500">
-          찍고 영역만 맞추면 자동으로 인식됩니다.
+          찍고 영역을 맞추면 바로 인식이 시작돼요. 뒷면(영문 등)이 있으면 추가한 뒤
+          <b> 결과 확인</b>을 누르세요.
         </p>
       </header>
 

@@ -36,6 +36,11 @@ function esc(v: string | null | undefined): string {
   return s;
 }
 
+// 전화·팩스: 엑셀/구글시트가 +, - 를 수식으로 계산하지 않도록 텍스트("=...")로 강제
+function phone(v: string | null | undefined): string {
+  return v ? `="${String(v).replace(/"/g, "")}"` : "";
+}
+
 function statusLabel(s: string | null): string {
   if (s === "confirmed") return "확인됨";
   if (s === "review_needed") return "검토 필요";
@@ -50,7 +55,8 @@ export function buildCsv(cards: ExportCard[]): string {
       [
         esc(c.name_ko), esc(c.name_en), esc(c.company_ko), esc(c.company_en),
         esc(c.department), esc(c.title_ko), esc(c.title_en),
-        esc(c.mobile), esc(c.office_phone), esc(c.fax), esc(c.email),
+        esc(phone(c.mobile)), esc(phone(c.office_phone)), esc(phone(c.fax)),
+        esc(c.email),
         esc(c.website), esc(c.address_ko), esc(c.address_en),
         esc(c.tags.join("; ")), esc(c.person_note), esc(c.company_note),
         esc(statusLabel(c.status)), esc(c.is_primary ? "현재" : ""),
