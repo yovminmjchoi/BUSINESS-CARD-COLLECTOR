@@ -44,6 +44,8 @@ npm install
    - `0001_init.sql` → 테이블 + RLS + 트리거
    - `0002_indexes.sql` → 확장·인덱스 (pg_trgm, tsvector)
    - `0003_grants.sql` → 역할 권한 부여 (SQL Editor 생성 시 "permission denied" 방지)
+   - `0004_person.sql` → 사람 연결(person_id, 이직 이력)
+   - `0005_primary.sql` → 현재(대표) 명함 지정(is_primary)
 4. **Storage** 에서 `card-images` 버킷 생성 (Private). RLS 정책은 `0001_init.sql`에 포함되어 있습니다.
 5. **Authentication → URL Configuration**
    - `Site URL`: 로컬 테스트 시 `http://localhost:3000` (배포 후 배포 URL로 변경)
@@ -78,11 +80,22 @@ npm run dev
 # http://localhost:3000
 ```
 
-### 5. Vercel 배포
+### 5. Vercel 배포 (폰에서 사용)
 
-1. [Vercel](https://vercel.com/)에 레포 임포트
-2. 위 환경변수를 동일하게 등록
-3. 배포 후 폰 브라우저에서 배포 URL 접속 (카메라·HTTPS 자동)
+1. [vercel.com](https://vercel.com/) 가입(GitHub 계정으로) → **Add New → Project** → 이 레포 Import
+2. **Environment Variables** 에 아래를 등록 (`.env.local`과 동일한 값):
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `GOOGLE_AI_API_KEY`
+   - `ALLOWED_LOGIN_EMAIL`
+   - (선택) `GEMINI_MODEL`
+3. **Deploy** → 완료되면 `https://<프로젝트명>.vercel.app` 주소가 생김
+4. **Supabase 설정을 배포 주소로 갱신** (안 하면 폰에서 로그인 안 됨):
+   - Authentication → URL Configuration → `Site URL` = 배포 URL
+   - `Redirect URLs` 에 `https://<프로젝트명>.vercel.app/auth/callback` 추가
+     (로컬 개발용 `http://localhost:3000/auth/callback` 도 함께 유지)
+5. 폰 브라우저에서 배포 URL 접속 → 로그인 → 홈 화면에 추가(아이폰: 공유 → "홈 화면에 추가")
+   하면 앱처럼 사용 가능. 카메라·HTTPS 자동.
 
 ---
 
