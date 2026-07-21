@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import CameraCapture from "@/components/CameraCapture";
-import ImageCropper from "@/components/ImageCropper";
+import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
 import TagSelector from "@/components/TagSelector";
 import { downscale, loadImage, cropBboxToBlob } from "@/lib/client-image";
 import type { CardExtraction } from "@/lib/gemini";
@@ -25,10 +25,11 @@ function displayName(e: CardExtraction): string {
 export default function BatchNewPage() {
   const router = useRouter();
   const [phase, setPhase] = useState<"capture" | "processing" | "review">("capture");
-  const [scanUrl, setScanUrl] = useState<string | null>(null);
   const [items, setItems] = useState<Item[]>([]);
   const [tagIds, setTagIds] = useState<string[]>([]);
-  const [cropIdx, setCropIdx] = useState<number | null>(null);
+  const scanImgRef = useRef<HTMLImageElement | null>(null);
+  // 크롭 오버레이: 해당 명함 주변만 확대한 이미지 + 그 안에서의 명함 위치
+  const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -39,8 +40,8 @@ export default function BatchNewPage() {
     try {
       const small = await downscale(raw);
       const url = URL.createObjectURL(small);
-      setScanUrl(url);
       const img = await loadImage(url);
+      scanImgRef.current = img;
 
       const form = new FormData();
       form.append("front", small);
@@ -69,9 +70,43 @@ export default function BatchNewPage() {
     }
   }
 
+  // 그 명함 주변만 확대해서 크롭 화면 열기 (전체 스캔은 너무 작아 정밀 크롭이 어려움)
+  async function openCrop(i: number) {
+    const img = scanImgRef.current;
+    if (!img) return;
+    const bbox = items[i].extraction.card_bbox ?? [0, 0, 1, 1];
+    const [x0, y0, x1, y1] = bbox;
+    const cw = x1 - x0;
+    const ch = y1 - y0;
+    // 명함 크기에 비례한 여유(위/아래 넉넉히) — 카드가 크게 보이면서 경계도 보이게
+    const mx = Math.min(0.25, cw * 0.25);
+    const my = Math.min(0.45, ch * 0.9);
+    const rx0 = Math.max(0, x0 - mx);
+    const ry0 = Math.max(0, y0 - my);
+    const rx1 = Math.min(1, x1 + mx);
+    const ry1 = Math.min(1, y1 + my);
+    const regionBlob = await cropBboxToBlob(img, [rx0, ry0, rx1, ry1]);
+    const src = URL.createObjectURL(regionBlob);
+    // 확대 이미지 안에서의 명함 위치(제안 박스)
+    const rw = rx1 - rx0;
+    const rh = ry1 - ry0;
+    const suggested: SuggestedBox = {
+      x0: (x0 - rx0) / rw,
+      y0: (y0 - ry0) / rh,
+      x1: (x1 - rx0) / rw,
+      y1: (y1 - ry0) / rh,
+    };
+    setCrop({ idx: i, src, suggested });
+  }
+
+  function closeCrop() {
+    if (crop) URL.revokeObjectURL(crop.src);
+    setCrop(null);
+  }
+
   function applyCrop(blob: Blob) {
-    if (cropIdx === null) return;
-    const i = cropIdx;
+    if (!crop) return;
+    const i = crop.idx;
     setItems((arr) =>
       arr.map((it, idx) => {
         if (idx !== i) return it;
@@ -79,7 +114,7 @@ export default function BatchNewPage() {
         return { ...it, blob, url: URL.createObjectURL(blob) };
       }),
     );
-    setCropIdx(null);
+    closeCrop();
   }
 
   async function saveAll() {
@@ -187,7 +222,7 @@ export default function BatchNewPage() {
                     {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
                     <button
                       type="button"
-                      onClick={() => setCropIdx(i)}
+                      onClick={() => openCrop(i)}
                       className="mt-1 text-xs text-blue-600 underline"
                     >
                       사진 크롭
@@ -215,21 +250,12 @@ export default function BatchNewPage() {
         </div>
       )}
 
-      {cropIdx !== null && scanUrl && (
+      {crop && (
         <ImageCropper
-          src={scanUrl}
-          suggested={
-            items[cropIdx].extraction.card_bbox
-              ? {
-                  x0: items[cropIdx].extraction.card_bbox![0],
-                  y0: items[cropIdx].extraction.card_bbox![1],
-                  x1: items[cropIdx].extraction.card_bbox![2],
-                  y1: items[cropIdx].extraction.card_bbox![3],
-                }
-              : null
-          }
+          src={crop.src}
+          suggested={crop.suggested}
           onApply={applyCrop}
-          onCancel={() => setCropIdx(null)}
+          onCancel={closeCrop}
           cancelLabel="취소"
         />
       )}
