@@ -13,8 +13,10 @@ const MODEL = process.env.GEMINI_MODEL ?? "gemini-3.1-flash-lite";
 export interface CardExtraction {
   name_ko: string | null;
   name_en: string | null;
-  family_name: string | null; // 성
-  given_name: string | null; // 이름
+  family_name_ko: string | null; // 성 (한글)
+  given_name_ko: string | null; // 이름 (한글)
+  family_name_en: string | null; // 성 (영문)
+  given_name_en: string | null; // 이름 (영문)
 
   company_ko: string | null;
   company_en: string | null;
@@ -113,8 +115,10 @@ function normalizeExtraction(raw: Record<string, unknown>): CardExtraction {
   return {
     name_ko: str(raw.name_ko),
     name_en: str(raw.name_en),
-    family_name: str(raw.family_name),
-    given_name: str(raw.given_name),
+    family_name_ko: str(raw.family_name_ko),
+    given_name_ko: str(raw.given_name_ko),
+    family_name_en: str(raw.family_name_en),
+    given_name_en: str(raw.given_name_en),
     company_ko: str(raw.company_ko),
     company_en: str(raw.company_en),
     department: str(raw.department),

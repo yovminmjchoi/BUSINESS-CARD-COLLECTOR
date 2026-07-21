@@ -11,7 +11,8 @@ const BUCKET = "card-images";
 // AI 로 다시 인식 → 빈 칸만 채움(기존 값·사용자 편집 보존) + 회사 정규화 재계산.
 // 처리 규칙(이름 분리 등)이 바뀐 뒤 기존 명함을 최신화할 때 사용.
 const FILL_FIELDS = [
-  "name_ko", "name_en", "family_name", "given_name",
+  "name_ko", "name_en",
+  "family_name_ko", "given_name_ko", "family_name_en", "given_name_en",
   "company_ko", "company_en", "department",
   "title_ko", "title_en", "mobile", "office_phone", "fax",
   "email", "website", "address_ko", "address_en",

@@ -18,9 +18,11 @@ interface Draft {
 // 편집 폼에 노출할 필드 (순서·라벨)
 const FIELDS: { key: keyof CardExtraction; label: string }[] = [
   { key: "name_ko", label: "이름 (한글)" },
+  { key: "family_name_ko", label: "성 (한글)" },
+  { key: "given_name_ko", label: "이름 (한글)" },
   { key: "name_en", label: "이름 (영문)" },
-  { key: "family_name", label: "성" },
-  { key: "given_name", label: "이름" },
+  { key: "family_name_en", label: "성 (영문)" },
+  { key: "given_name_en", label: "이름 (영문)" },
   { key: "company_ko", label: "회사 (한글)" },
   { key: "company_en", label: "회사 (영문)" },
   { key: "department", label: "부서" },
@@ -36,7 +38,8 @@ const FIELDS: { key: keyof CardExtraction; label: string }[] = [
 ];
 
 const EMPTY: CardExtraction = {
-  name_ko: null, name_en: null, family_name: null, given_name: null,
+  name_ko: null, name_en: null,
+  family_name_ko: null, given_name_ko: null, family_name_en: null, given_name_en: null,
   company_ko: null, company_en: null,
   department: null, title_ko: null, title_en: null, mobile: null,
   office_phone: null, fax: null, email: null, website: null,

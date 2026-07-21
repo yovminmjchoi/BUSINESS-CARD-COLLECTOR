@@ -3,8 +3,10 @@
 export interface ExportCard {
   name_ko: string | null;
   name_en: string | null;
-  family_name: string | null;
-  given_name: string | null;
+  family_name_ko: string | null;
+  given_name_ko: string | null;
+  family_name_en: string | null;
+  given_name_en: string | null;
   company_ko: string | null;
   company_en: string | null;
   department: string | null;
@@ -26,7 +28,8 @@ export interface ExportCard {
 }
 
 const HEADERS = [
-  "이름(한글)", "이름(영문)", "성", "이름", "회사(한글)", "회사(영문)", "부서",
+  "이름(한글)", "이름(영문)", "성(한글)", "이름(한글)", "성(영문)", "이름(영문)",
+  "회사(한글)", "회사(영문)", "부서",
   "직함(한글)", "직함(영문)", "휴대폰", "유선전화", "팩스",
   "이메일", "웹사이트", "주소(한글)", "주소(영문)", "태그",
   "인물메모", "회사메모", "상태", "현재명함", "등록일",
@@ -55,7 +58,9 @@ export function buildCsv(cards: ExportCard[]): string {
   for (const c of cards) {
     lines.push(
       [
-        esc(c.name_ko), esc(c.name_en), esc(c.family_name), esc(c.given_name),
+        esc(c.name_ko), esc(c.name_en),
+        esc(c.family_name_ko), esc(c.given_name_ko),
+        esc(c.family_name_en), esc(c.given_name_en),
         esc(c.company_ko), esc(c.company_en),
         esc(c.department), esc(c.title_ko), esc(c.title_en),
         esc(phone(c.mobile)), esc(phone(c.office_phone)), esc(phone(c.fax)),

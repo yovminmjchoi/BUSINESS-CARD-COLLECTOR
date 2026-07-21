@@ -19,6 +19,17 @@ function esc(v: string | null | undefined): string {
 }
 
 // 75바이트 접기(folding)는 관용적으로 생략해도 임포트에 문제없어 단순화.
+// N 필드: 한글 성/이름 우선, 없으면 영문, 둘 다 없으면 전체이름 통짜
+function nameN(rep: VcardCard, displayName: string): string {
+  if (rep.family_name_ko || rep.given_name_ko) {
+    return `N:${esc(rep.family_name_ko)};${esc(rep.given_name_ko)};;;`;
+  }
+  if (rep.family_name_en || rep.given_name_en) {
+    return `N:${esc(rep.family_name_en)};${esc(rep.given_name_en)};;;`;
+  }
+  return `N:${esc(displayName)};;;;`;
+}
+
 function vcardForPerson(cards: VcardCard[]): string {
   // 대표: is_primary 우선, 없으면 created_at 최신
   const sorted = [...cards].sort((a, b) =>
@@ -36,10 +47,8 @@ function vcardForPerson(cards: VcardCard[]): string {
   const lines: string[] = [
     "BEGIN:VCARD",
     "VERSION:3.0",
-    // 성/이름이 분리돼 있으면 N:Family;Given 으로 (연락처 정렬·표시 정확)
-    rep.family_name || rep.given_name
-      ? `N:${esc(rep.family_name)};${esc(rep.given_name)};;;`
-      : `N:${esc(displayName)};;;;`,
+    // 성/이름 분리가 있으면 N:Family;Given (한글 우선, 없으면 영문). 연락처 정렬·표시 정확.
+    nameN(rep, displayName),
     `FN:${esc(displayName)}`,
   ];
 

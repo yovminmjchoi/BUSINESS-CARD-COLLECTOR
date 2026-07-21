@@ -11,7 +11,7 @@ export async function fetchCardsForExport(
   const { data, error } = await supabase
     .from("cards")
     .select(
-      "person_id,is_primary,created_at,status,name_ko,name_en,family_name,given_name,company_ko,company_en,department,title_ko,title_en,mobile,office_phone,fax,email,website,address_ko,address_en,person_note,company_note,card_tags(tags(name))",
+      "person_id,is_primary,created_at,status,name_ko,name_en,family_name_ko,given_name_ko,family_name_en,given_name_en,company_ko,company_en,department,title_ko,title_en,mobile,office_phone,fax,email,website,address_ko,address_en,person_note,company_note,card_tags(tags(name))",
     );
   if (error) throw new Error(error.message);
 

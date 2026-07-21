@@ -46,7 +46,8 @@ npm install
    - `0003_grants.sql` → 역할 권한 부여 (SQL Editor 생성 시 "permission denied" 방지)
    - `0004_person.sql` → 사람 연결(person_id, 이직 이력)
    - `0005_primary.sql` → 현재(대표) 명함 지정(is_primary)
-   - `0006_name.sql` → 성/이름 분리(family_name, given_name)
+   - `0006_name.sql` → 성/이름 분리(초기)
+   - `0007_name_bilingual.sql` → 성/이름 한글·영문 각각(family/given _ko/_en)
 4. **Storage** 에서 `card-images` 버킷 생성 (Private). RLS 정책은 `0001_init.sql`에 포함되어 있습니다.
 5. **Authentication → URL Configuration**
    - `Site URL`: 로컬 테스트 시 `http://localhost:3000` (배포 후 배포 URL로 변경)
