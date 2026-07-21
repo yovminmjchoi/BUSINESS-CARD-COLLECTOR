@@ -60,6 +60,7 @@ export default function BatchNewPage() {
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const backTargetRef = useRef<number | null>(null);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
+  const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -166,20 +167,34 @@ export default function BatchNewPage() {
     backInputRef.current?.click();
   }
 
+  // 뒷면 선택 → 축소 후 크롭 화면 먼저 (앞면과 동일하게 크롭·문서필터 거침)
   async function addBack(file: File) {
     const i = backTargetRef.current;
     backTargetRef.current = null;
     if (i === null) return;
     setError("");
+    const small = await downscale(file);
+    setBackCrop({ idx: i, src: URL.createObjectURL(small) });
+  }
+
+  function closeBackCrop() {
+    if (backCrop) URL.revokeObjectURL(backCrop.src);
+    setBackCrop(null);
+  }
+
+  // 크롭 적용된 뒷면 → 추출 → 빈 칸 채우기 + 저장용 blob 보관
+  async function finishBack(blob: Blob) {
+    if (!backCrop) return;
+    const i = backCrop.idx;
+    closeBackCrop();
     setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: true } : x)));
     try {
-      const small = await downscale(file);
-      const bUrl = URL.createObjectURL(small);
+      const bUrl = URL.createObjectURL(blob);
       // 뒷면 이미지 단독 추출 (보통 영문면)
       const form = new FormData();
       form.append("mode", "detect");
-      form.append("front", small);
-      form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
+      form.append("front", new File([blob], "back.jpg", { type: "image/jpeg" }));
+      form.append("front_cropped", "1");
       const res = await fetch("/api/extract", { method: "POST", body: form });
       const data = await res.json();
       const backEx = (data.extraction ?? null) as CardExtraction | null;
@@ -190,7 +205,7 @@ export default function BatchNewPage() {
           const { merged, filled } = backEx
             ? mergeEmpty(x.extraction, backEx)
             : { merged: x.extraction, filled: 0 };
-          return { ...x, extraction: merged, backBlob: small, backUrl: bUrl, backBusy: false, backFilled: filled };
+          return { ...x, extraction: merged, backBlob: blob, backUrl: bUrl, backBusy: false, backFilled: filled };
         }),
       );
     } catch {
@@ -457,6 +472,15 @@ export default function BatchNewPage() {
           suggested={crop.suggested}
           onApply={applyCrop}
           onCancel={closeCrop}
+          cancelLabel="취소"
+        />
+      )}
+
+      {backCrop && (
+        <ImageCropper
+          src={backCrop.src}
+          onApply={finishBack}
+          onCancel={closeBackCrop}
           cancelLabel="취소"
         />
       )}
