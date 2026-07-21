@@ -75,19 +75,21 @@ export default function CardDetail({
   const [showHistory, setShowHistory] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
 
-  async function handleSetPrimary() {
+  // 지정한 카드를 사람 그룹의 대표로. 목록 캐시를 완전히 우회하도록 하드 리로드.
+  async function makePrimary(targetId: string | null) {
+    if (!targetId) return;
     setSettingPrimary(true);
     try {
-      const res = await fetch(`/api/cards/${card.id}/primary`, { method: "POST" });
+      const res = await fetch(`/api/cards/${targetId}/primary`, { method: "POST" });
       if (res.ok) {
-        // 목록의 대표 카드가 즉시 반영되도록 캐시 무효화 후 이동
-        router.refresh();
-        router.push("/?done=primary");
+        window.location.href = "/?done=primary";
       } else {
         const d = await res.json();
         setMessage(d.error ?? "지정 실패");
+        setSettingPrimary(false);
       }
-    } finally {
+    } catch {
+      setMessage("네트워크 오류. 다시 시도하세요.");
       setSettingPrimary(false);
     }
   }
@@ -184,7 +186,7 @@ export default function CardDetail({
             ) : (
               <button
                 type="button"
-                onClick={handleSetPrimary}
+                onClick={() => makePrimary(card.id)}
                 disabled={settingPrimary}
                 className="flex-shrink-0 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-medium text-indigo-700 disabled:opacity-50"
               >
@@ -194,19 +196,22 @@ export default function CardDetail({
           </div>
           <ul className="flex flex-col gap-1">
             {otherCards.map((o) => (
-              <li key={o.id}>
+              <li key={o.id} className="flex items-center justify-between gap-2">
                 <Link
                   href={`/card/${o.id}`}
-                  className="flex justify-between gap-2 text-sm text-gray-700"
+                  className="min-w-0 flex-1 truncate text-sm text-gray-700 underline"
                 >
-                  <span className="truncate">
-                    {o.company}
-                    {o.title ? ` · ${o.title}` : ""}
-                  </span>
-                  <span className="flex-shrink-0 text-xs text-gray-400">
-                    {new Date(o.createdAt).toLocaleDateString("ko-KR")}
-                  </span>
+                  {o.company}
+                  {o.title ? ` · ${o.title}` : ""}
                 </Link>
+                <button
+                  type="button"
+                  onClick={() => makePrimary(o.id)}
+                  disabled={settingPrimary}
+                  className="flex-shrink-0 rounded-full border border-indigo-300 px-2 py-0.5 text-[11px] font-medium text-indigo-700 disabled:opacity-50"
+                >
+                  대표로
+                </button>
               </li>
             ))}
           </ul>
