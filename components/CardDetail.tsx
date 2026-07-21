@@ -10,6 +10,8 @@ import { downscale } from "@/lib/client-image";
 const FIELDS: { key: string; label: string }[] = [
   { key: "name_ko", label: "이름 (한글)" },
   { key: "name_en", label: "이름 (영문)" },
+  { key: "family_name", label: "성" },
+  { key: "given_name", label: "이름" },
   { key: "company_ko", label: "회사 (한글)" },
   { key: "company_en", label: "회사 (영문)" },
   { key: "department", label: "부서" },
@@ -184,6 +186,26 @@ export default function CardDetail({
     } catch {
       setMessage("네트워크 오류. 다시 시도하세요.");
       setSaving(false);
+    }
+  }
+
+  async function handleReanalyze() {
+    if (!confirm("사진으로 다시 인식해 빈 칸을 채울까요? (이미 입력된 값은 유지됩니다)")) return;
+    setImgBusy(true);
+    setMessage("");
+    try {
+      const res = await fetch(`/api/cards/${card.id}/reanalyze`, { method: "POST" });
+      const d = await res.json();
+      if (res.ok) {
+        setMessage(d.filled > 0 ? `${d.filled}개 항목을 채웠습니다.` : "채울 빈 칸이 없었습니다.");
+        window.location.reload();
+      } else {
+        setMessage(d.error ?? "다시 인식 실패");
+        setImgBusy(false);
+      }
+    } catch {
+      setMessage("네트워크 오류. 다시 시도하세요.");
+      setImgBusy(false);
     }
   }
 
@@ -392,6 +414,15 @@ export default function CardDetail({
         className="w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
       >
         {saving ? "저장 중…" : "저장"}
+      </button>
+
+      <button
+        type="button"
+        onClick={handleReanalyze}
+        disabled={imgBusy}
+        className="text-center text-sm text-gray-500 underline disabled:opacity-50"
+      >
+        사진으로 다시 인식 (빈 칸 채우기)
       </button>
 
       {/* 편집 이력 — 직접 수정한 내역만. AI 최초 추출은 한 줄 요약. */}

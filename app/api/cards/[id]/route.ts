@@ -5,7 +5,8 @@ import { pickCompanyNormalized } from "@/lib/normalize";
 export const runtime = "nodejs";
 
 const TEXT_FIELDS = [
-  "name_ko", "name_en", "company_ko", "company_en", "department",
+  "name_ko", "name_en", "family_name", "given_name",
+  "company_ko", "company_en", "department",
   "title_ko", "title_en", "mobile", "office_phone", "fax",
   "email", "website", "address_ko", "address_en",
   "person_note", "company_note",

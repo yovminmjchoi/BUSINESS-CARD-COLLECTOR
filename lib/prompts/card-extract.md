@@ -2,6 +2,12 @@
 
 ## 한국 명함의 특성
 - 한글과 영문이 병기되는 경우가 많습니다. **같은 사람·회사·직함의 두 언어 표기일 뿐, 서로 다른 사람이 아닙니다.** 한글은 `*_ko`, 영문은 `*_en` 필드에 각각 넣으세요.
+
+## 이름 분리 (family_name / given_name)
+- 명함의 이름 표기가 제각각(예: `민정 최`, `최민정`, `Choi Minjeong`, `Min-jeong Choi`, `CHOI, Minjeong`)이라도 **성(family_name)과 이름(given_name)을 분리**하세요.
+- 한국 성씨 지식을 활용하세요 (김/이/박/최/정/강/조/윤/장/임/한/오/서/신/권/황/안/송/전/홍 등). 순서가 뒤바뀌어 있어도 성을 정확히 식별하세요.
+- **한글 이름이 있으면 한글 기준**으로 분리(예: family_name="최", given_name="민정"). 한글이 없으면 영문 기준(family_name="Choi", given_name="Minjeong").
+- `name_ko`·`name_en`에는 명함에 보이는 **전체 이름**을 그대로 두고, 분리 결과만 family/given에 채웁니다.
 - 앞면과 뒷면(또는 여러 이미지)이 함께 제공되면 한 사람의 정보로 통합해 추출합니다.
 
 ## 직함(title) — 한국식 체계 예시
@@ -37,6 +43,8 @@
 {
   "name_ko": "...",
   "name_en": "...",
+  "family_name": "...",
+  "given_name": "...",
   "company_ko": "...",
   "company_en": "...",
   "department": "...",

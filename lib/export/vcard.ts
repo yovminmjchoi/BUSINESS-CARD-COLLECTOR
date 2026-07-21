@@ -36,8 +36,10 @@ function vcardForPerson(cards: VcardCard[]): string {
   const lines: string[] = [
     "BEGIN:VCARD",
     "VERSION:3.0",
-    // 한국식: 성+이름 분리 대신 전체 이름 통짜 (명함에서 성/이름 분리가 불확실)
-    `N:${esc(displayName)};;;;`,
+    // 성/이름이 분리돼 있으면 N:Family;Given 으로 (연락처 정렬·표시 정확)
+    rep.family_name || rep.given_name
+      ? `N:${esc(rep.family_name)};${esc(rep.given_name)};;;`
+      : `N:${esc(displayName)};;;;`,
     `FN:${esc(displayName)}`,
   ];
 

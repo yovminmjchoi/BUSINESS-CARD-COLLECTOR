@@ -19,6 +19,8 @@ interface Draft {
 const FIELDS: { key: keyof CardExtraction; label: string }[] = [
   { key: "name_ko", label: "이름 (한글)" },
   { key: "name_en", label: "이름 (영문)" },
+  { key: "family_name", label: "성" },
+  { key: "given_name", label: "이름" },
   { key: "company_ko", label: "회사 (한글)" },
   { key: "company_en", label: "회사 (영문)" },
   { key: "department", label: "부서" },
@@ -34,7 +36,8 @@ const FIELDS: { key: keyof CardExtraction; label: string }[] = [
 ];
 
 const EMPTY: CardExtraction = {
-  name_ko: null, name_en: null, company_ko: null, company_en: null,
+  name_ko: null, name_en: null, family_name: null, given_name: null,
+  company_ko: null, company_en: null,
   department: null, title_ko: null, title_en: null, mobile: null,
   office_phone: null, fax: null, email: null, website: null,
   address_ko: null, address_en: null, language: null, confidence: null, notes: null,

@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 
 // card_edits 로 이력을 남길 텍스트 필드 (card 컬럼명과 1:1)
 const TRACKED_FIELDS: (keyof CardExtraction)[] = [
-  "name_ko", "name_en", "company_ko", "company_en", "department",
+  "name_ko", "name_en", "family_name", "given_name",
+  "company_ko", "company_en", "department",
   "title_ko", "title_en", "mobile", "office_phone", "fax",
   "email", "website", "address_ko", "address_en",
 ];
@@ -66,6 +67,8 @@ export async function POST(request: Request) {
       status,
       name_ko: clean(v.name_ko),
       name_en: clean(v.name_en),
+      family_name: clean(v.family_name),
+      given_name: clean(v.given_name),
       company_ko: clean(v.company_ko),
       company_en: clean(v.company_en),
       company_normalized: companyNormalized,
