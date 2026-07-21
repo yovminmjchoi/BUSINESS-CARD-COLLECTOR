@@ -114,6 +114,30 @@ export default async function ListPage({
   const cardPersonId = new Map<string, string>();
   rows.forEach((r) => cardPersonId.set(r.id, r.person_id));
 
+  // 같은 사람 명함을 한 줄로 접기: 대표 = 정렬상 첫(=기본 최근순이면 최신) 명함.
+  // 태그는 그 사람의 (현재 화면에 보이는) 카드들 것을 합쳐서 대표에 표시.
+  const personTagMap = new Map<string, Map<string, CardListTag>>();
+  for (const c of cards) {
+    const pid = cardPersonId.get(c.id) ?? c.id;
+    let m = personTagMap.get(pid);
+    if (!m) {
+      m = new Map();
+      personTagMap.set(pid, m);
+    }
+    for (const t of c.tags) m.set(t.id, t);
+  }
+  const seenPerson = new Set<string>();
+  const displayCards: CardListData[] = [];
+  for (const c of cards) {
+    const pid = cardPersonId.get(c.id) ?? c.id;
+    if (seenPerson.has(pid)) continue;
+    seenPerson.add(pid);
+    displayCards.push({
+      ...c,
+      tags: [...(personTagMap.get(pid)?.values() ?? [])],
+    });
+  }
+
   const { data: allTags } = await supabase
     .from("tags")
     .select("id,name,color")
@@ -136,7 +160,13 @@ export default async function ListPage({
   return (
     <main className="mx-auto min-h-screen max-w-md pb-28">
       <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
-        <h1 className="text-lg font-bold">명함 {cards.length > 0 && `(${cards.length})`}</h1>
+        <h1 className="text-lg font-bold">
+          명함{" "}
+          {cards.length > 0 &&
+            (cards.length === displayCards.length
+              ? `(${cards.length})`
+              : `(${displayCards.length}명 · ${cards.length}장)`)}
+        </h1>
         <SearchBar q={q} status={status} sort={sort} tag={tag} />
         <FilterChips q={q} status={status} sort={sort} tag={tag} />
         <TagFilter
@@ -161,7 +191,7 @@ export default async function ListPage({
         </div>
       ) : (
         <ul>
-          {cards.map((card) => (
+          {displayCards.map((card) => (
             <li key={card.id}>
               <CardListItem
                 card={card}
