@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
 import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
@@ -27,9 +27,22 @@ export default function NewCardPage() {
   const [crop, setCrop] = useState<{ side: Side; url: string; full: File } | null>(null);
   const [suggested, setSuggested] = useState<SuggestedBox | null>(null);
   const [extraction, setExtraction] = useState<CardExtraction | null>(null);
+  const [detecting, setDetecting] = useState(false); // 인식 진행 중(특히 뒷면 추가 후)
+
+  // 최신 추출 결과와 진행 중인 인식 요청을 ref 로 추적.
+  //  - 뒷면 인식은 크롭 뒤 비동기로 도는데, 저장을 먼저 누르면 앞면만 저장되던 문제 방지.
+  //  - 저장 시 pendingDetectRef 를 await 하고 extractionRef(최신)를 사용.
+  const extractionRef = useRef<CardExtraction | null>(null);
+  const pendingDetectRef = useRef<Promise<void> | null>(null);
+  const detectSeqRef = useRef(0);
 
   const [status, setStatus] = useState<"idle" | "saving">("idle");
   const [error, setError] = useState("");
+
+  function applyExtraction(e: CardExtraction) {
+    extractionRef.current = e;
+    setExtraction(e);
+  }
 
   useEffect(() => {
     fetch("/api/extract").catch(() => {}); // 워밍업
@@ -47,24 +60,35 @@ export default function NewCardPage() {
     }
   }
 
-  // AI 감지: bbox → 크롭 박스 자동 맞춤, 추출 결과는 확인 화면으로
-  async function detect(f: File, b: File | null) {
-    const form = new FormData();
-    form.append("mode", "detect");
-    form.append("front", f);
-    form.append("front_cropped", ready(f));
-    if (b) form.append("back", b);
-    try {
-      const res = await fetch("/api/extract", { method: "POST", body: form });
-      const data = await res.json();
-      if (data.extraction) {
-        setExtraction(data.extraction);
-        const bb = data.extraction.card_bbox as [number, number, number, number] | null;
-        if (bb) setSuggested({ x0: bb[0], y0: bb[1], x1: bb[2], y1: bb[3] });
+  // AI 감지: bbox → 크롭 박스 자동 맞춤, 추출 결과는 확인 화면으로.
+  // 뒷면 추가 시 앞+뒤로 재호출됨. 순서가 뒤바뀐 응답(앞면만)이 최신 결과를 덮어쓰지
+  // 않도록 시퀀스로 방어하고, 진행 중 promise 를 저장 시 await 한다.
+  function detect(f: File, b: File | null): Promise<void> {
+    const seq = ++detectSeqRef.current;
+    setDetecting(true);
+    const p = (async () => {
+      const form = new FormData();
+      form.append("mode", "detect");
+      form.append("front", f);
+      form.append("front_cropped", ready(f));
+      if (b) form.append("back", b);
+      try {
+        const res = await fetch("/api/extract", { method: "POST", body: form });
+        const data = await res.json();
+        if (seq !== detectSeqRef.current) return; // 더 최신 요청이 있으면 무시
+        if (data.extraction) {
+          applyExtraction(data.extraction);
+          const bb = data.extraction.card_bbox as [number, number, number, number] | null;
+          if (bb) setSuggested({ x0: bb[0], y0: bb[1], x1: bb[2], y1: bb[3] });
+        }
+      } catch {
+        /* 감지 실패는 무시 — 수동 크롭 가능 */
+      } finally {
+        if (seq === detectSeqRef.current) setDetecting(false);
       }
-    } catch {
-      /* 감지 실패는 무시 — 수동 크롭 가능 */
-    }
+    })();
+    pendingDetectRef.current = p;
+    return p;
   }
 
   function applyCrop(blob: Blob) {
@@ -91,9 +115,19 @@ export default function NewCardPage() {
     if (!frontCropped) return;
     setStatus("saving");
     setError("");
+    // 진행 중인 인식(특히 방금 추가한 뒷면)을 기다린 뒤 최신 결과를 사용.
+    // 이걸 안 하면 뒷면 인식이 끝나기 전에 저장돼 뒷면 내용이 누락됨.
+    if (pendingDetectRef.current) {
+      try {
+        await pendingDetectRef.current;
+      } catch {
+        /* 무시 */
+      }
+    }
+    const finalExtraction = extractionRef.current;
     const form = new FormData();
     // 감지가 이미 끝났으면 저장만(빠름). 아직이면 이 요청에서 추출까지(중복 호출 방지).
-    form.append("mode", extraction ? "store" : "");
+    form.append("mode", finalExtraction ? "store" : "");
     form.append("front", frontCropped);
     form.append("front_cropped", "1");
     if (backCropped) form.append("back", backCropped);
@@ -111,7 +145,7 @@ export default function NewCardPage() {
           draftId: data.draftId,
           imageFrontPath: data.imageFrontPath,
           imageBackPath: data.imageBackPath,
-          extraction: extraction ?? data.extraction ?? null,
+          extraction: finalExtraction ?? data.extraction ?? null,
         }),
       );
       router.push("/new/review");
@@ -178,7 +212,13 @@ export default function NewCardPage() {
         disabled={!frontCropped || status === "saving"}
         className="mt-2 w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-40"
       >
-        {status === "saving" ? "저장 중…" : "추출 결과 확인 →"}
+        {status === "saving"
+          ? detecting
+            ? "인식 마무리 중…"
+            : "저장 중…"
+          : detecting
+            ? "인식 중… (눌러도 됨)"
+            : "추출 결과 확인 →"}
       </button>
 
       {crop && (
