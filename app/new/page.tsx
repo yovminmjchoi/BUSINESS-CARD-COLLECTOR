@@ -38,6 +38,9 @@ export default function NewCardPage() {
 
   const [status, setStatus] = useState<"idle" | "saving">("idle");
   const [error, setError] = useState("");
+  // 앞면 크롭 직후 "뒷면도 있나요?" 프롬프트 (연속 촬영). 한 번만 자동 노출.
+  const [askBack, setAskBack] = useState(false);
+  const backPromptedRef = useRef(false);
 
   function applyExtraction(e: CardExtraction) {
     extractionRef.current = e;
@@ -99,6 +102,11 @@ export default function NewCardPage() {
       if (frontUrl) URL.revokeObjectURL(frontUrl);
       setFrontCropped(file);
       setFrontUrl(url);
+      // 앞면 완료 → 바로 뒷면 촬영으로 이어지도록 프롬프트 (최초 1회)
+      if (!backCropped && !backPromptedRef.current) {
+        backPromptedRef.current = true;
+        setAskBack(true);
+      }
     } else {
       if (backUrl) URL.revokeObjectURL(backUrl);
       setBackCropped(file);
@@ -233,6 +241,34 @@ export default function NewCardPage() {
           cancelLabel="그대로 사용"
         />
       )}
+
+      {/* 앞면 크롭 직후: 이어서 뒷면 촬영 (연속 흐름) */}
+      {askBack && !crop && (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/50">
+          <div className="mx-auto w-full max-w-md rounded-t-2xl bg-white p-5 pb-8">
+            <h2 className="text-base font-semibold">앞면 완료 · 뒷면도 있나요?</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              뒷면(영문면 등)이 있으면 이어서 찍어 크롭하세요. 없으면 건너뛰면 돼요.
+            </p>
+            <div className="mt-4">
+              <CameraCapture
+                label="뒷면 촬영"
+                onSelect={(f) => {
+                  setAskBack(false);
+                  pick("back", f);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setAskBack(false)}
+              className="mt-3 w-full rounded-lg border border-gray-300 px-4 py-3 text-base text-gray-600"
+            >
+              뒷면 없음 · 건너뛰기
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 
@@ -244,6 +280,10 @@ export default function NewCardPage() {
       if (frontUrl) URL.revokeObjectURL(frontUrl);
       setFrontCropped(file);
       setFrontUrl(url);
+      if (!backCropped && !backPromptedRef.current) {
+        backPromptedRef.current = true;
+        setAskBack(true);
+      }
     } else {
       if (backUrl) URL.revokeObjectURL(backUrl);
       setBackCropped(file);
