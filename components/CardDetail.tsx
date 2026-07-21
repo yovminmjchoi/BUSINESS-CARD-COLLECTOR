@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
+import ImageCropper from "@/components/ImageCropper";
+import { downscale } from "@/lib/client-image";
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "name_ko", label: "이름 (한글)" },
@@ -74,6 +76,69 @@ export default function CardDetail({
   const [message, setMessage] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
+  const [imgBusy, setImgBusy] = useState(false);
+  const [cropState, setCropState] = useState<{ side: "front" | "back"; src: string } | null>(null);
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
+
+  // 사진 교체/추가: 새 파일 업로드 → 서버가 경로 갱신 → 화면 새로고침
+  async function uploadImage(side: "front" | "back", blob: Blob) {
+    setImgBusy(true);
+    setMessage("");
+    try {
+      const form = new FormData();
+      form.append("side", side);
+      form.append("file", new File([blob], "card.jpg", { type: "image/jpeg" }));
+      const res = await fetch(`/api/cards/${card.id}/image`, { method: "POST", body: form });
+      if (!res.ok) {
+        const d = await res.json();
+        setMessage(d.error ?? "사진 저장 실패");
+        setImgBusy(false);
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setMessage("네트워크 오류. 다시 시도하세요.");
+      setImgBusy(false);
+    }
+  }
+
+  async function retake(side: "front" | "back", file: File) {
+    const small = await downscale(file);
+    // 다시 찍은 사진도 크롭 화면 거치기
+    setCropState({ side, src: URL.createObjectURL(small) });
+  }
+
+  // 저장된 사진 크롭: 서명 URL → blob → 크롭 오버레이
+  async function cropExisting(side: "front" | "back", url: string) {
+    setImgBusy(true);
+    try {
+      const r = await fetch(url);
+      const b = await r.blob();
+      setCropState({ side, src: URL.createObjectURL(b) });
+    } catch {
+      setMessage("이미지를 불러오지 못했습니다.");
+    } finally {
+      setImgBusy(false);
+    }
+  }
+
+  async function deleteImage(side: "front" | "back") {
+    if (!confirm("이 사진을 삭제할까요? (명함 정보는 유지됩니다)")) return;
+    setImgBusy(true);
+    try {
+      const res = await fetch(`/api/cards/${card.id}/image?side=${side}`, { method: "DELETE" });
+      if (res.ok) window.location.reload();
+      else {
+        const d = await res.json();
+        setMessage(d.error ?? "삭제 실패");
+        setImgBusy(false);
+      }
+    } catch {
+      setMessage("네트워크 오류. 다시 시도하세요.");
+      setImgBusy(false);
+    }
+  }
 
   // 지정한 카드를 사람 그룹의 대표로. 목록 캐시를 완전히 우회하도록 하드 리로드.
   async function makePrimary(targetId: string | null) {
@@ -156,20 +221,104 @@ export default function CardDetail({
         </select>
       </header>
 
-      {frontUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={frontUrl}
-          alt="명함 앞면"
-          className="w-full rounded-lg border border-gray-200 object-contain"
-        />
-      )}
-      {backUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={backUrl}
-          alt="명함 뒷면"
-          className="w-full rounded-lg border border-gray-200 object-contain"
+      {/* 앞면 사진 + 관리 */}
+      <div className="flex flex-col gap-1.5">
+        {frontUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={frontUrl}
+            alt="명함 앞면"
+            className="w-full rounded-lg border border-gray-200 object-contain"
+          />
+        ) : (
+          <div className="flex h-24 items-center justify-center rounded-lg bg-gray-100 text-sm text-gray-400">
+            앞면 사진 없음
+          </div>
+        )}
+        <div className="flex gap-2 text-xs">
+          {frontUrl && (
+            <button type="button" disabled={imgBusy} onClick={() => cropExisting("front", frontUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+              크롭
+            </button>
+          )}
+          <button type="button" disabled={imgBusy} onClick={() => frontInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+            {frontUrl ? "다시 찍기" : "앞면 사진 추가"}
+          </button>
+          {frontUrl && (
+            <button type="button" disabled={imgBusy} onClick={() => deleteImage("front")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">
+              사진 삭제
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 뒷면 사진 + 관리 */}
+      <div className="flex flex-col gap-1.5">
+        {backUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={backUrl}
+            alt="명함 뒷면"
+            className="w-full rounded-lg border border-gray-200 object-contain"
+          />
+        )}
+        <div className="flex gap-2 text-xs">
+          {backUrl && (
+            <button type="button" disabled={imgBusy} onClick={() => cropExisting("back", backUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+              크롭
+            </button>
+          )}
+          <button type="button" disabled={imgBusy} onClick={() => backInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+            {backUrl ? "뒷면 다시 찍기" : "뒷면 사진 추가"}
+          </button>
+          {backUrl && (
+            <button type="button" disabled={imgBusy} onClick={() => deleteImage("back")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">
+              사진 삭제
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 사진 교체용 숨김 입력 */}
+      <input
+        ref={frontInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) retake("front", f);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={backInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) retake("back", f);
+          e.target.value = "";
+        }}
+      />
+
+      {cropState && (
+        <ImageCropper
+          src={cropState.src}
+          onApply={(blob) => {
+            const side = cropState.side;
+            URL.revokeObjectURL(cropState.src);
+            setCropState(null);
+            uploadImage(side, blob);
+          }}
+          onCancel={() => {
+            URL.revokeObjectURL(cropState.src);
+            setCropState(null);
+          }}
+          cancelLabel="취소"
         />
       )}
 

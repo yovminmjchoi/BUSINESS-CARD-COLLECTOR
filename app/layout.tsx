@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "react-image-crop/dist/ReactCrop.css";
 
 export const metadata: Metadata = {
   title: "명함 정리",

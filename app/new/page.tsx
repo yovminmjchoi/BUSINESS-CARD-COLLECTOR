@@ -3,38 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
+import ImageCropper from "@/components/ImageCropper";
+import { downscale } from "@/lib/client-image";
 
-// 업로드 전 클라이언트 축소: 원본(3~5MB)을 장변 2000px JPEG(~0.3MB)로.
-// 브라우저가 못 읽는 포맷(데스크톱 HEIC 등)이면 원본 그대로 → 서버가 변환.
-async function downscale(file: File): Promise<File> {
-  try {
-    const url = URL.createObjectURL(file);
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = reject;
-      i.src = url;
-    });
-    const MAX = 2000;
-    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.round(img.naturalWidth * scale);
-    const h = Math.round(img.naturalHeight * scale);
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("no canvas");
-    ctx.drawImage(img, 0, 0, w, h);
-    URL.revokeObjectURL(url);
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/jpeg", 0.85),
-    );
-    if (!blob) throw new Error("toBlob failed");
-    return new File([blob], "card.jpg", { type: "image/jpeg" });
-  } catch {
-    return file;
-  }
-}
+type Side = "front" | "back";
 
 export default function NewCardPage() {
   const router = useRouter();
@@ -45,16 +17,42 @@ export default function NewCardPage() {
   const [showBack, setShowBack] = useState(false);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [error, setError] = useState("");
+  // 크롭 오버레이 대상: 촬영 직후 축소본을 들고 있다가 적용/스킵 결정
+  const [cropTarget, setCropTarget] = useState<{ side: Side; file: File; url: string } | null>(null);
 
-  function pickFront(file: File) {
-    setFront(file);
-    if (frontUrl) URL.revokeObjectURL(frontUrl);
-    setFrontUrl(URL.createObjectURL(file));
+  function setImage(side: Side, file: File) {
+    const url = URL.createObjectURL(file);
+    if (side === "front") {
+      if (frontUrl) URL.revokeObjectURL(frontUrl);
+      setFront(file);
+      setFrontUrl(url);
+    } else {
+      if (backUrl) URL.revokeObjectURL(backUrl);
+      setBack(file);
+      setBackUrl(url);
+    }
   }
-  function pickBack(file: File) {
-    setBack(file);
-    if (backUrl) URL.revokeObjectURL(backUrl);
-    setBackUrl(URL.createObjectURL(file));
+
+  // 촬영/선택 → 축소 → 크롭 화면 열기
+  async function pick(side: Side, raw: File) {
+    setError("");
+    const small = await downscale(raw);
+    setCropTarget({ side, file: small, url: URL.createObjectURL(small) });
+  }
+
+  function applyCrop(blob: Blob) {
+    if (!cropTarget) return;
+    const file = new File([blob], "card.jpg", { type: "image/jpeg" });
+    setImage(cropTarget.side, file);
+    URL.revokeObjectURL(cropTarget.url);
+    setCropTarget(null);
+  }
+
+  function skipCrop() {
+    if (!cropTarget) return;
+    setImage(cropTarget.side, cropTarget.file);
+    URL.revokeObjectURL(cropTarget.url);
+    setCropTarget(null);
   }
 
   async function handleExtract() {
@@ -62,27 +60,19 @@ export default function NewCardPage() {
     setStatus("submitting");
     setError("");
 
-    // 업로드 전 축소 (속도 개선의 핵심)
-    const [frontSmall, backSmall] = await Promise.all([
-      downscale(front),
-      back ? downscale(back) : Promise.resolve(null),
-    ]);
-
     const form = new FormData();
-    form.append("front", frontSmall);
-    if (backSmall) form.append("back", backSmall);
+    form.append("front", front);
+    form.append("front_cropped", "1"); // 크롭 화면을 거쳤으므로 서버 자동크롭 생략
+    if (back) form.append("back", back);
 
     try {
       const res = await fetch("/api/extract", { method: "POST", body: form });
       const data = await res.json();
-
-      // 추출 실패(502)여도 이미지 경로가 있으면 수동 입력용으로 넘어감
       if (!res.ok && !data.imageFrontPath) {
         setError(data.error ?? "추출에 실패했습니다.");
         setStatus("idle");
         return;
       }
-
       sessionStorage.setItem("cardDraft", JSON.stringify(data));
       router.push("/new/review");
     } catch {
@@ -96,7 +86,7 @@ export default function NewCardPage() {
       <header>
         <h1 className="text-xl font-bold">명함 촬영</h1>
         <p className="mt-1 text-sm text-gray-500">
-          한 컷에 명함 한 장. 앞면을 찍고, 필요하면 뒷면도 이어 찍으세요.
+          한 컷에 명함 한 장. 촬영 후 명함 영역을 잘라낼 수 있어요.
         </p>
       </header>
 
@@ -111,10 +101,23 @@ export default function NewCardPage() {
             className="w-full rounded-lg border border-gray-200 object-contain"
           />
         )}
-        <CameraCapture
-          label={front ? "앞면 다시 찍기" : "앞면 촬영"}
-          onSelect={pickFront}
-        />
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <CameraCapture
+              label={front ? "앞면 다시 찍기" : "앞면 촬영"}
+              onSelect={(f) => pick("front", f)}
+            />
+          </div>
+          {front && frontUrl && (
+            <button
+              type="button"
+              onClick={() => setCropTarget({ side: "front", file: front, url: frontUrl })}
+              className="rounded-lg border border-gray-300 px-3 text-sm text-gray-700"
+            >
+              다시 크롭
+            </button>
+          )}
+        </div>
       </section>
 
       {/* 뒷면 (선택) */}
@@ -131,7 +134,7 @@ export default function NewCardPage() {
           )}
           <CameraCapture
             label={back ? "뒷면 다시 찍기" : "뒷면 촬영"}
-            onSelect={pickBack}
+            onSelect={(f) => pick("back", f)}
           />
         </section>
       ) : (
@@ -156,6 +159,15 @@ export default function NewCardPage() {
       >
         {status === "submitting" ? "추출 중… (잠시만요)" : "추출하기"}
       </button>
+
+      {cropTarget && (
+        <ImageCropper
+          src={cropTarget.url}
+          onApply={applyCrop}
+          onCancel={skipCrop}
+          cancelLabel="그대로 사용"
+        />
+      )}
     </main>
   );
 }

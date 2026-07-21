@@ -1,44 +1,14 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import heicConvert from "heic-convert";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
+import { toResizedJpeg } from "@/lib/image";
 import { extractBusinessCard, type CardImage } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const BUCKET = "card-images";
-const MAX_EDGE = 2000; // 장변 2000px 리사이즈 (크롭은 하지 않음)
-
-// HEIC/HEIF 판별: mime, 확장자, 또는 ftyp 브랜드(magic bytes)
-function isHeic(file: File, buf: Buffer): boolean {
-  const type = file.type.toLowerCase();
-  if (type === "image/heic" || type === "image/heif") return true;
-  if (/\.(heic|heif)$/i.test(file.name)) return true;
-  // ftyp box 브랜드 검사 (offset 8~12: heic/heix/mif1/heis 등)
-  if (buf.length >= 12 && buf.toString("ascii", 4, 8) === "ftyp") {
-    const brand = buf.toString("ascii", 8, 12);
-    if (/heic|heix|hevc|heim|heis|hevm|hevs|mif1|msf1/.test(brand)) return true;
-  }
-  return false;
-}
-
-// 원본 → 장변 2000px JPEG (EXIF 회전 반영). sharp가 HEIC 디코딩을 못 하므로
-// HEIC 이면 heic-convert 로 먼저 JPEG 변환. 저장·추출 공용.
-async function toResizedJpeg(file: File): Promise<Buffer> {
-  let input = Buffer.from(await file.arrayBuffer());
-  if (isHeic(file, input)) {
-    input = Buffer.from(
-      await heicConvert({ buffer: input, format: "JPEG", quality: 0.92 }),
-    );
-  }
-  return sharp(input)
-    .rotate() // EXIF 방향 자동 보정
-    .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 82 })
-    .toBuffer();
-}
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -96,8 +66,10 @@ export async function POST(request: Request) {
   }
 
   // 2) bbox 가 있으면 앞면에서 명함 영역만 크롭 (여유 4%)
+  //    사용자가 크롭 화면을 거친 경우(front_cropped=1)는 이중 크롭 방지 위해 생략
+  const clientCropped = form.get("front_cropped") === "1";
   let frontOut = frontJpeg;
-  if (extraction?.card_bbox) {
+  if (!clientCropped && extraction?.card_bbox) {
     try {
       frontOut = await cropByBbox(frontJpeg, extraction.card_bbox);
     } catch {
