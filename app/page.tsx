@@ -218,6 +218,7 @@ export default async function ListPage({
               : null,
             groupCount: personCount.get(cardPersonId.get(card.id) ?? "") ?? 1,
           }))}
+          sort={sort}
         />
       )}
 

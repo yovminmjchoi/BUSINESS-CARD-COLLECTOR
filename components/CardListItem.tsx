@@ -56,10 +56,10 @@ export default function CardListItem({
         <img
           src={thumbUrl}
           alt=""
-          className="h-12 w-16 flex-shrink-0 rounded object-cover"
+          className="h-14 w-14 flex-shrink-0 rounded bg-gray-50 object-contain"
         />
       ) : (
-        <div className="flex h-12 w-16 flex-shrink-0 items-center justify-center rounded bg-gray-100 text-[10px] text-gray-400">
+        <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded bg-gray-100 text-[10px] text-gray-400">
           이미지
         </div>
       )}

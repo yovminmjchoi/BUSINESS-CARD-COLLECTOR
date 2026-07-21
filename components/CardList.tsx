@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import CardListItem, { type CardListData } from "@/components/CardListItem";
+import { initialOf } from "@/lib/hangul";
 
 export interface CardListEntry {
   card: CardListData;
@@ -10,7 +11,20 @@ export interface CardListEntry {
   groupCount: number;
 }
 
-export default function CardList({ entries }: { entries: CardListEntry[] }) {
+// 정렬 기준에 따라 섹션 색인 라벨 계산 (이름/회사 정렬일 때만 헤더 표시)
+function sectionLabel(card: CardListData, sort: string): string | null {
+  if (sort.startsWith("name")) return initialOf(card.name_ko || card.name_en);
+  if (sort.startsWith("company")) return initialOf(card.company_ko || card.company_en);
+  return null;
+}
+
+export default function CardList({
+  entries,
+  sort = "",
+}: {
+  entries: CardListEntry[];
+  sort?: string;
+}) {
   const router = useRouter();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -89,18 +103,30 @@ export default function CardList({ entries }: { entries: CardListEntry[] }) {
       </div>
 
       <ul>
-        {entries.map((e) => (
-          <li key={e.card.id}>
-            <CardListItem
-              card={e.card}
-              thumbUrl={e.thumbUrl}
-              groupCount={e.groupCount}
-              selectMode={selectMode}
-              selected={selected.has(e.card.id)}
-              onToggle={() => toggle(e.card.id)}
-            />
-          </li>
-        ))}
+        {entries.map((e, i) => {
+          const label = sectionLabel(e.card, sort);
+          const prev = i > 0 ? sectionLabel(entries[i - 1].card, sort) : null;
+          const showHeader = label !== null && label !== prev;
+          return (
+            <Fragment key={e.card.id}>
+              {showHeader && (
+                <li className="sticky top-0 bg-gray-50 px-4 py-1 text-xs font-semibold text-gray-500">
+                  {label}
+                </li>
+              )}
+              <li>
+                <CardListItem
+                  card={e.card}
+                  thumbUrl={e.thumbUrl}
+                  groupCount={e.groupCount}
+                  selectMode={selectMode}
+                  selected={selected.has(e.card.id)}
+                  onToggle={() => toggle(e.card.id)}
+                />
+              </li>
+            </Fragment>
+          );
+        })}
       </ul>
     </div>
   );

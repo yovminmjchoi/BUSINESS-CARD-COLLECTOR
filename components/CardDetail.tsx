@@ -180,9 +180,8 @@ export default function CardDetail({
         setSaving(false);
         return;
       }
-      setMessage("저장되었습니다.");
-      setSaving(false);
-      router.refresh();
+      // 저장 후 목록으로 (수정 완료를 배너로 확인)
+      router.push("/?done=saved");
     } catch {
       setMessage("네트워크 오류. 다시 시도하세요.");
       setSaving(false);
