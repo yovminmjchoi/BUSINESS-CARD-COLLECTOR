@@ -15,12 +15,39 @@ interface Item {
   url: string;
   include: boolean;
   tagIds: string[];
+  backBlob?: Blob; // 이 명함의 뒷면(선택) — 저장 시 함께 업로드
+  backUrl?: string;
+  backBusy?: boolean; // 뒷면 인식 중
+  backFilled?: number; // 뒷면으로 채운 빈 칸 수
 }
 
 function displayName(e: CardExtraction): string {
   const ko = [e.family_name_ko, e.given_name_ko].filter(Boolean).join("");
   const en = [e.given_name_en, e.family_name_en].filter(Boolean).join(" ");
   return ko || en || e.name_ko || e.name_en || "(이름 없음)";
+}
+
+// 뒷면 추출 결과로 빈 칸만 채움 (앞면·사용자 값 보존)
+const MERGE_FIELDS: (keyof CardExtraction)[] = [
+  "name_ko", "name_en",
+  "family_name_ko", "given_name_ko", "family_name_en", "given_name_en",
+  "company_ko", "company_en", "department", "title_ko", "title_en",
+  "mobile", "office_phone", "fax", "email", "website", "address_ko", "address_en",
+];
+
+function mergeEmpty(base: CardExtraction, extra: CardExtraction): { merged: CardExtraction; filled: number } {
+  const merged = { ...base };
+  let filled = 0;
+  for (const f of MERGE_FIELDS) {
+    const cur = merged[f];
+    const add = extra[f];
+    if ((cur === null || cur === "" || cur === undefined) && typeof add === "string" && add.trim() !== "") {
+      // @ts-expect-error 문자열 필드에만 대입
+      merged[f] = add.trim();
+      filled += 1;
+    }
+  }
+  return { merged, filled };
 }
 
 export default function BatchNewPage() {
@@ -30,6 +57,8 @@ export default function BatchNewPage() {
   const [tagList, setTagList] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState("");
   const scanImgRef = useRef<HTMLImageElement | null>(null);
+  const backInputRef = useRef<HTMLInputElement | null>(null);
+  const backTargetRef = useRef<number | null>(null);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -131,6 +160,45 @@ export default function BatchNewPage() {
     });
   }
 
+  // 이 명함의 뒷면 촬영/선택 → 추출 → 빈 칸 채우기
+  function pickBack(i: number) {
+    backTargetRef.current = i;
+    backInputRef.current?.click();
+  }
+
+  async function addBack(file: File) {
+    const i = backTargetRef.current;
+    backTargetRef.current = null;
+    if (i === null) return;
+    setError("");
+    setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: true } : x)));
+    try {
+      const small = await downscale(file);
+      const bUrl = URL.createObjectURL(small);
+      // 뒷면 이미지 단독 추출 (보통 영문면)
+      const form = new FormData();
+      form.append("mode", "detect");
+      form.append("front", small);
+      form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
+      const res = await fetch("/api/extract", { method: "POST", body: form });
+      const data = await res.json();
+      const backEx = (data.extraction ?? null) as CardExtraction | null;
+      setItems((arr) =>
+        arr.map((x, idx) => {
+          if (idx !== i) return x;
+          if (x.backUrl) URL.revokeObjectURL(x.backUrl);
+          const { merged, filled } = backEx
+            ? mergeEmpty(x.extraction, backEx)
+            : { merged: x.extraction, filled: 0 };
+          return { ...x, extraction: merged, backBlob: small, backUrl: bUrl, backBusy: false, backFilled: filled };
+        }),
+      );
+    } catch {
+      setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: false } : x)));
+      setError("뒷면 인식에 실패했어요. 다시 시도하세요.");
+    }
+  }
+
   async function openCrop(i: number) {
     const img = scanImgRef.current;
     if (!img) return;
@@ -184,6 +252,9 @@ export default function BatchNewPage() {
         storeForm.append("mode", "store");
         storeForm.append("front", new File([it.blob], "card.jpg", { type: "image/jpeg" }));
         storeForm.append("front_cropped", "1");
+        if (it.backBlob) {
+          storeForm.append("back", new File([it.backBlob], "back.jpg", { type: "image/jpeg" }));
+        }
         const sres = await fetch("/api/extract", { method: "POST", body: storeForm });
         const sdata = await sres.json();
         if (!sres.ok) throw new Error(sdata.error ?? "이미지 저장 실패");
@@ -195,7 +266,7 @@ export default function BatchNewPage() {
             values: it.extraction,
             extraction: it.extraction,
             imageFrontPath: sdata.imageFrontPath,
-            imageBackPath: null,
+            imageBackPath: sdata.imageBackPath ?? null,
             tagIds: it.tagIds,
           }),
         });
@@ -221,7 +292,7 @@ export default function BatchNewPage() {
         <Link href="/new" className="text-sm text-gray-500">← 한 장씩 촬영</Link>
         <h1 className="mt-2 text-xl font-bold">여러 명함 한 번에</h1>
         <p className="mt-1 text-sm text-gray-500">
-          여러 명함이 한 이미지에 있으면 한 번에 인식해요. 명함마다 태그를 따로 달 수 있어요.
+          여러 명함이 한 이미지에 있으면 한 번에 인식해요. 명함마다 태그·뒷면을 따로 달 수 있어요.
         </p>
       </header>
 
@@ -233,6 +304,19 @@ export default function BatchNewPage() {
           <p>명함들을 인식하는 중…</p>
         </div>
       )}
+
+      {/* 뒷면 촬영/선택용 숨김 입력 (명함별 공용) */}
+      <input
+        ref={backInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) addBack(f);
+          e.target.value = "";
+        }}
+      />
 
       {phase === "review" && (
         <>
@@ -303,9 +387,28 @@ export default function BatchNewPage() {
                       <div className="truncate text-gray-500">{[company, title].filter(Boolean).join(" · ")}</div>
                     )}
                     {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
-                    <button type="button" onClick={() => openCrop(i)} className="mt-1 text-xs text-blue-600 underline">
-                      사진 크롭
-                    </button>
+                    <div className="mt-1 flex flex-wrap items-center gap-3">
+                      <button type="button" onClick={() => openCrop(i)} className="text-xs text-blue-600 underline">
+                        사진 크롭
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => pickBack(i)}
+                        disabled={it.backBusy}
+                        className="text-xs text-blue-600 underline disabled:opacity-50"
+                      >
+                        {it.backBusy ? "뒷면 인식 중…" : it.backUrl ? "뒷면 다시" : "뒷면 추가"}
+                      </button>
+                      {it.backUrl && !it.backBusy && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={it.backUrl} alt="뒷면" className="h-8 w-12 rounded border border-gray-200 bg-gray-50 object-contain" />
+                      )}
+                    </div>
+                    {typeof it.backFilled === "number" && !it.backBusy && (
+                      <div className={"mt-0.5 text-[11px] " + (it.backFilled > 0 ? "text-green-600" : "text-gray-400")}>
+                        {it.backFilled > 0 ? `뒷면에서 ${it.backFilled}칸 채움` : "뒷면에서 새로 채운 칸 없음"}
+                      </div>
+                    )}
                     {/* 이 명함의 태그 */}
                     {tagList.length > 0 && (
                       <div className="mt-1.5 flex flex-wrap gap-1">
