@@ -12,6 +12,15 @@ export interface SuggestedBox {
   y1: number;
 }
 
+// 문서 스캔 정리 필터 — 오래되고 얼룩진 명함을 깔끔하게.
+// CSS 필터 문자열은 미리보기(<img>)와 최종 캔버스(ctx.filter)에 동일 적용 → WYSIWYG.
+type FilterMode = "none" | "color" | "doc";
+const FILTERS: { id: FilterMode; label: string; css: string }[] = [
+  { id: "none", label: "원본", css: "none" },
+  { id: "color", label: "선명", css: "contrast(1.2) saturate(1.35) brightness(1.05)" },
+  { id: "doc", label: "흑백 문서", css: "grayscale(1) brightness(1.18) contrast(1.8)" },
+];
+
 // 전체 화면 크롭 오버레이. 모서리/변 드래그로 영역 조절 (스캔 앱 스타일).
 export default function ImageCropper({
   src,
@@ -36,7 +45,10 @@ export default function ImageCropper({
     height: 92,
   });
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<FilterMode>("none");
   const touchedRef = useRef(false); // 사용자가 박스를 만졌는지
+
+  const filterCss = FILTERS.find((f) => f.id === filter)?.css ?? "none";
 
   async function rotate() {
     setBusy(true);
@@ -91,6 +103,8 @@ export default function ImageCropper({
       canvas.height = Math.max(1, Math.round(sh));
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("no canvas");
+      // 문서 정리 필터를 결과에 굽기 (미리보기와 동일). 미지원 브라우저면 원본.
+      if (filterCss !== "none" && "filter" in ctx) ctx.filter = filterCss;
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       onApply(await canvasToJpeg(canvas));
     } catch {
@@ -129,8 +143,28 @@ export default function ImageCropper({
             src={displaySrc}
             alt="크롭 대상"
             className="max-h-[70vh] w-auto max-w-full"
+            style={{ filter: filterCss }}
           />
         </ReactCrop>
+      </div>
+
+      {/* 문서 정리 필터 선택 */}
+      <div className="flex justify-center gap-2 px-4 pb-1">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFilter(f.id)}
+            className={
+              "rounded-full px-3 py-1 text-sm " +
+              (filter === f.id
+                ? "bg-white font-medium text-gray-900"
+                : "border border-white/40 text-white")
+            }
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-2 p-4 pb-8">
