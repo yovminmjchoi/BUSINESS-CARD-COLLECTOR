@@ -10,6 +10,7 @@ import TagFilter from "@/components/TagFilter";
 import TabBar from "@/components/TabBar";
 
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store"; // is_primary 등 변경 즉시 반영
 
 const SEARCH_COLUMNS = [
   "name_ko", "name_en", "company_ko", "company_en",
