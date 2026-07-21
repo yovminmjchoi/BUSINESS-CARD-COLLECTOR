@@ -6,7 +6,7 @@ import { buildCsv } from "@/lib/export/csv";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -15,14 +15,20 @@ export async function GET() {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
+  const scope =
+    new URL(request.url).searchParams.get("scope") === "primary"
+      ? ("primary" as const)
+      : ("all" as const);
+
   try {
-    const cards = await fetchCardsForExport(supabase);
+    const cards = await fetchCardsForExport(supabase, scope);
     const csv = buildCsv(cards);
     const date = new Date().toISOString().slice(0, 10);
+    const suffix = scope === "primary" ? "-current" : "";
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="business-cards-${date}.csv"`,
+        "Content-Disposition": `attachment; filename="business-cards${suffix}-${date}.csv"`,
       },
     });
   } catch (e) {

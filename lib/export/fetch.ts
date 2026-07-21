@@ -3,8 +3,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VcardCard } from "./vcard";
 
+// scope="primary" 면 사람당 대표 명함 1장만 (is_primary 우선, 없으면 최신)
 export async function fetchCardsForExport(
   supabase: SupabaseClient,
+  scope: "all" | "primary" = "all",
 ): Promise<VcardCard[]> {
   const { data, error } = await supabase
     .from("cards")
@@ -51,5 +53,9 @@ export async function fetchCardsForExport(
       return an.localeCompare(bn, "ko");
     });
 
+  if (scope === "primary") {
+    // 각 그룹의 첫 카드 = 대표 (위에서 대표를 맨 앞으로 정렬해둠)
+    return sortedGroups.map((g) => g[0]);
+  }
   return sortedGroups.flat();
 }
