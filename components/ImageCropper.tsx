@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactCrop, { type Crop } from "react-image-crop";
-import { canvasToJpeg, rotate90 } from "@/lib/client-image";
+import { applyDocFilter, canvasToJpeg, rotate90 } from "@/lib/client-image";
 
 // AI 가 감지한 명함 영역 [x0,y0,x1,y1] (0~1). 도착하면 크롭 박스를 자동으로 맞춤.
 export interface SuggestedBox {
@@ -103,9 +103,10 @@ export default function ImageCropper({
       canvas.height = Math.max(1, Math.round(sh));
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("no canvas");
-      // 문서 정리 필터를 결과에 굽기 (미리보기와 동일). 미지원 브라우저면 원본.
-      if (filterCss !== "none" && "filter" in ctx) ctx.filter = filterCss;
       ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      // 문서 정리 필터를 픽셀 단위로 결과에 굽기 (미리보기 CSS 필터와 동일 수식).
+      // ctx.filter 대신 수동 계산 → 구형 iOS Safari 에서도 저장본에 반영됨.
+      applyDocFilter(canvas, filter);
       onApply(await canvasToJpeg(canvas));
     } catch {
       setBusy(false);

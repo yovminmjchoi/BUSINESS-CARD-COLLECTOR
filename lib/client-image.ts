@@ -67,6 +67,40 @@ export async function rotate90(src: string): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
+// 문서 정리 필터를 캔버스에 직접(픽셀) 적용.
+// ctx.filter 는 구형 iOS Safari(17 미만)에서 무시되므로 수동 계산해야 저장본에 반영됨.
+// 미리보기 CSS 필터 문자열과 동일 수식·순서로 맞춤(ImageCropper FILTERS 참고).
+export function applyDocFilter(
+  canvas: HTMLCanvasElement,
+  mode: "none" | "color" | "doc",
+): void {
+  if (mode === "none") return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const im = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = im.data;
+  const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  const contrast = (v: number, c: number) => (v - 127.5) * c + 127.5;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i + 1], b = d[i + 2];
+    if (mode === "doc") {
+      // grayscale(1) → brightness(1.18) → contrast(1.8)
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = g = b = l * 1.18;
+      r = contrast(r, 1.8); g = contrast(g, 1.8); b = contrast(b, 1.8);
+    } else {
+      // color: contrast(1.2) → saturate(1.35) → brightness(1.05)
+      r = contrast(r, 1.2); g = contrast(g, 1.2); b = contrast(b, 1.2);
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = (l + 1.35 * (r - l)) * 1.05;
+      g = (l + 1.35 * (g - l)) * 1.05;
+      b = (l + 1.35 * (b - l)) * 1.05;
+    }
+    d[i] = clamp(r); d[i + 1] = clamp(g); d[i + 2] = clamp(b);
+  }
+  ctx.putImageData(im, 0, 0);
+}
+
 export function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
