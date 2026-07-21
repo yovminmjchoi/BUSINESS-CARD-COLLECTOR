@@ -10,8 +10,10 @@ const STATUSES = [
 
 const SORTS = [
   { v: "", label: "최근순" },
-  { v: "company", label: "회사순" },
-  { v: "name", label: "이름순" },
+  { v: "company", label: "회사 가나다" },
+  { v: "company_desc", label: "회사 역순" },
+  { v: "name", label: "이름 가나다" },
+  { v: "name_desc", label: "이름 역순" },
 ];
 
 export default function FilterChips({

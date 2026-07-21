@@ -13,10 +13,11 @@ const NONE = "__none__"; // 회사 미상 그룹 키
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string }>;
+  searchParams: Promise<{ c?: string; s?: string }>;
 }) {
   const sp = await searchParams;
   const selected = sp.c;
+  const sortBy = sp.s ?? ""; // "" 많은순 / "name" 가나다 / "name_desc" 역순
   const supabase = await createClient();
 
   // ── 회사 상세 모드: 선택된 회사의 명함 목록 ──
@@ -122,16 +123,44 @@ export default async function CompaniesPage({
       groups.set(key, { name, count: 1 });
     }
   }
-  const list = [...groups.entries()]
-    .map(([key, v]) => ({ key, ...v }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  const list = [...groups.entries()].map(([key, v]) => ({ key, ...v }));
+  if (sortBy === "name") {
+    list.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  } else if (sortBy === "name_desc") {
+    list.sort((a, b) => b.name.localeCompare(a.name, "ko"));
+  } else {
+    list.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
+  }
+
+  const SORTS = [
+    { v: "", label: "많은순" },
+    { v: "name", label: "가나다" },
+    { v: "name_desc", label: "역순" },
+  ];
 
   return (
     <main className="mx-auto min-h-screen max-w-md pb-24">
-      <div className="border-b border-gray-100 p-4">
+      <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-4">
         <h1 className="text-lg font-bold">
           회사 {list.length > 0 && `(${list.length})`}
         </h1>
+        <div className="flex gap-1.5">
+          {SORTS.map((s) => {
+            const active = sortBy === s.v;
+            return (
+              <Link
+                key={s.v}
+                href={s.v ? `/companies?s=${s.v}` : "/companies"}
+                className={
+                  "rounded-full px-2.5 py-1 text-xs " +
+                  (active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600")
+                }
+              >
+                {s.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       {list.length === 0 ? (

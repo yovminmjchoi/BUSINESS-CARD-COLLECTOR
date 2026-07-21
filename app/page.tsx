@@ -82,8 +82,12 @@ export default async function ListPage({
 
   if (sort === "company") {
     query = query.order("company_normalized", { ascending: true, nullsFirst: false });
+  } else if (sort === "company_desc") {
+    query = query.order("company_normalized", { ascending: false, nullsFirst: false });
   } else if (sort === "name") {
     query = query.order("name_ko", { ascending: true, nullsFirst: false });
+  } else if (sort === "name_desc") {
+    query = query.order("name_ko", { ascending: false, nullsFirst: false });
   } else {
     query = query.order("created_at", { ascending: false });
   }
