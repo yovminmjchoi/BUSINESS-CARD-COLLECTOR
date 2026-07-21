@@ -28,6 +28,9 @@ export interface CardExtraction {
   language: "ko" | "en" | "mixed" | null;
   confidence: "high" | "medium" | "low" | null;
   notes: string | null;
+  // 첫 번째 이미지에서 명함이 차지하는 영역 [x_min, y_min, x_max, y_max] (0~1 비율).
+  // 서버가 이 좌표로 배경을 잘라내 저장. 판단 불가면 null.
+  card_bbox: [number, number, number, number] | null;
 }
 
 export interface CardImage {
@@ -122,7 +125,18 @@ function normalizeExtraction(raw: Record<string, unknown>): CardExtraction {
     language: coerceEnum(raw.language, ["ko", "en", "mixed"] as const),
     confidence: coerceEnum(raw.confidence, ["high", "medium", "low"] as const),
     notes: str(raw.notes),
+    card_bbox: coerceBbox(raw.card_bbox),
   };
+}
+
+// [x_min, y_min, x_max, y_max] 0~1 검증. 이상하면 null(크롭 생략).
+function coerceBbox(v: unknown): [number, number, number, number] | null {
+  if (!Array.isArray(v) || v.length !== 4) return null;
+  const n = v.map(Number);
+  if (n.some((x) => !Number.isFinite(x) || x < 0 || x > 1)) return null;
+  const [x0, y0, x1, y1] = n;
+  if (x1 - x0 < 0.1 || y1 - y0 < 0.1) return null; // 너무 작으면 오검출로 간주
+  return [x0, y0, x1, y1];
 }
 
 function coerceEnum<T extends string>(

@@ -4,6 +4,38 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
 
+// 업로드 전 클라이언트 축소: 원본(3~5MB)을 장변 2000px JPEG(~0.3MB)로.
+// 브라우저가 못 읽는 포맷(데스크톱 HEIC 등)이면 원본 그대로 → 서버가 변환.
+async function downscale(file: File): Promise<File> {
+  try {
+    const url = URL.createObjectURL(file);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+    const MAX = 2000;
+    const scale = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * scale);
+    const h = Math.round(img.naturalHeight * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no canvas");
+    ctx.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85),
+    );
+    if (!blob) throw new Error("toBlob failed");
+    return new File([blob], "card.jpg", { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 export default function NewCardPage() {
   const router = useRouter();
   const [front, setFront] = useState<File | null>(null);
@@ -30,9 +62,15 @@ export default function NewCardPage() {
     setStatus("submitting");
     setError("");
 
+    // 업로드 전 축소 (속도 개선의 핵심)
+    const [frontSmall, backSmall] = await Promise.all([
+      downscale(front),
+      back ? downscale(back) : Promise.resolve(null),
+    ]);
+
     const form = new FormData();
-    form.append("front", front);
-    if (back) form.append("back", back);
+    form.append("front", frontSmall);
+    if (backSmall) form.append("back", backSmall);
 
     try {
       const res = await fetch("/api/extract", { method: "POST", body: form });

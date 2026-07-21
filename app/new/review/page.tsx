@@ -38,6 +38,7 @@ const EMPTY: CardExtraction = {
   department: null, title_ko: null, title_en: null, mobile: null,
   office_phone: null, fax: null, email: null, website: null,
   address_ko: null, address_en: null, language: null, confidence: null, notes: null,
+  card_bbox: null,
 };
 
 export default function ReviewPage() {
