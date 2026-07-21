@@ -11,9 +11,39 @@ export interface Tag {
 export const TAG_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#eab308",
   "#84cc16", "#22c55e", "#10b981", "#14b8a6",
-  "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6",
-  "#d946ef", "#ec4899", "#f43f5e", "#6b7280",
+  "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
+  "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
+  "#f43f5e", "#64748b", "#6b7280", "#78716c",
+  "#b91c1c", "#c2410c", "#15803d", "#1d4ed8",
 ];
+
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const c = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return Math.round(255 * c)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+// 아직 안 쓰인 팔레트 색을 고름. 다 쓰였으면 임의 색조로 새 색 생성(중복 최소화).
+export function pickUnusedColor(used: (string | null | undefined)[]): string {
+  const set = new Set(
+    used.filter(Boolean).map((c) => (c as string).toLowerCase()),
+  );
+  const free = TAG_COLORS.find((c) => !set.has(c.toLowerCase()));
+  if (free) return free;
+  for (let i = 0; i < 24; i++) {
+    const cand = hslToHex(Math.floor(Math.random() * 360), 65, 52);
+    if (!set.has(cand.toLowerCase())) return cand;
+  }
+  return hslToHex(Math.floor(Math.random() * 360), 65, 52);
+}
 
 export default function TagSelector({
   value,
@@ -47,7 +77,7 @@ export default function TagSelector({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
-          color: TAG_COLORS[tags.length % TAG_COLORS.length],
+          color: pickUnusedColor(tags.map((t) => t.color)),
         }),
       });
       const d = await res.json();

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import CameraCapture from "@/components/CameraCapture";
 import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
-import { TAG_COLORS, type Tag } from "@/components/TagSelector";
+import { pickUnusedColor, type Tag } from "@/components/TagSelector";
 import { downscale, loadImage, cropBboxToBlob } from "@/lib/client-image";
 import type { CardExtraction } from "@/lib/gemini";
 
@@ -128,7 +128,7 @@ export default function BatchNewPage() {
     const res = await fetch("/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, color: TAG_COLORS[tagList.length % TAG_COLORS.length] }),
+      body: JSON.stringify({ name, color: pickUnusedColor(tagList.map((t) => t.color)) }),
     });
     const d = await res.json();
     if (res.ok && d.tag) {
