@@ -4,18 +4,44 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import CameraCapture from "@/components/CameraCapture";
-import { downscale } from "@/lib/client-image";
+import ImageCropper from "@/components/ImageCropper";
+import TagSelector from "@/components/TagSelector";
+import { downscale, loadImage, cropBboxToBlob } from "@/lib/client-image";
+import type { CardExtraction } from "@/lib/gemini";
+
+interface Item {
+  extraction: CardExtraction;
+  blob: Blob;
+  url: string;
+  include: boolean;
+}
+
+function displayName(e: CardExtraction): string {
+  const ko = [e.family_name_ko, e.given_name_ko].filter(Boolean).join("");
+  const en = [e.given_name_en, e.family_name_en].filter(Boolean).join(" ");
+  return ko || en || e.name_ko || e.name_en || "(이름 없음)";
+}
 
 export default function BatchNewPage() {
   const router = useRouter();
-  const [status, setStatus] = useState<"idle" | "working">("idle");
+  const [phase, setPhase] = useState<"capture" | "processing" | "review">("capture");
+  const [scanUrl, setScanUrl] = useState<string | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [cropIdx, setCropIdx] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
 
-  async function handle(raw: File) {
-    setStatus("working");
+  async function handleScan(raw: File) {
+    setPhase("processing");
     setError("");
     try {
       const small = await downscale(raw);
+      const url = URL.createObjectURL(small);
+      setScanUrl(url);
+      const img = await loadImage(url);
+
       const form = new FormData();
       form.append("front", small);
       form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
@@ -23,40 +49,190 @@ export default function BatchNewPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? "인식에 실패했습니다.");
-        setStatus("idle");
+        setPhase("capture");
         return;
       }
-      sessionStorage.setItem("batchDraft", JSON.stringify(data.cards));
-      router.push("/new/batch/review");
+      const cards: CardExtraction[] = data.cards;
+      const built: Item[] = await Promise.all(
+        cards.map(async (e) => {
+          const blob = e.card_bbox
+            ? await cropBboxToBlob(img, e.card_bbox)
+            : await cropBboxToBlob(img, [0, 0, 1, 1]);
+          return { extraction: e, blob, url: URL.createObjectURL(blob), include: true };
+        }),
+      );
+      setItems(built);
+      setPhase("review");
     } catch {
-      setError("네트워크 오류. 잠시 후 다시 시도하세요.");
-      setStatus("idle");
+      setError("처리 중 오류가 발생했습니다. 다시 시도하세요.");
+      setPhase("capture");
     }
   }
 
+  function applyCrop(blob: Blob) {
+    if (cropIdx === null) return;
+    const i = cropIdx;
+    setItems((arr) =>
+      arr.map((it, idx) => {
+        if (idx !== i) return it;
+        URL.revokeObjectURL(it.url);
+        return { ...it, blob, url: URL.createObjectURL(blob) };
+      }),
+    );
+    setCropIdx(null);
+  }
+
+  async function saveAll() {
+    setSaving(true);
+    setError("");
+    let done = 0;
+    try {
+      for (const it of items) {
+        if (!it.include) continue;
+        // 1) 크롭 이미지 저장
+        const storeForm = new FormData();
+        storeForm.append("mode", "store");
+        storeForm.append("front", new File([it.blob], "card.jpg", { type: "image/jpeg" }));
+        storeForm.append("front_cropped", "1");
+        const sres = await fetch("/api/extract", { method: "POST", body: storeForm });
+        const sdata = await sres.json();
+        if (!sres.ok) throw new Error(sdata.error ?? "이미지 저장 실패");
+
+        // 2) 카드 생성 (일괄 태그 적용)
+        const cres = await fetch("/api/cards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            values: it.extraction,
+            extraction: it.extraction,
+            imageFrontPath: sdata.imageFrontPath,
+            imageBackPath: null,
+            tagIds,
+          }),
+        });
+        if (!cres.ok) {
+          const d = await cres.json();
+          throw new Error(d.error ?? "저장 실패");
+        }
+        done += 1;
+        setProgress(done);
+      }
+      router.push(`/?done=batch&n=${done}`);
+    } catch (e) {
+      setError(`${done}개 저장 후 실패: ${e instanceof Error ? e.message : ""}`);
+      setSaving(false);
+    }
+  }
+
+  const selectedCount = items.filter((i) => i.include).length;
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 p-6">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 p-6 pb-28">
       <header>
-        <Link href="/new" className="text-sm text-gray-500">
-          ← 한 장씩 촬영
-        </Link>
+        <Link href="/new" className="text-sm text-gray-500">← 한 장씩 촬영</Link>
         <h1 className="mt-2 text-xl font-bold">여러 명함 한 번에</h1>
         <p className="mt-1 text-sm text-gray-500">
-          여러 명함이 한 이미지(스캔·사진)에 있으면 한 번에 인식합니다. 각 명함을
-          잘라 개별로 저장해요.
+          여러 명함이 한 이미지에 있으면 한 번에 인식해요. 각 명함을 잘라 개별로 저장합니다.
         </p>
       </header>
 
-      {status === "working" ? (
+      {phase === "capture" && <CameraCapture label="스캔 촬영" onSelect={handleScan} />}
+
+      {phase === "processing" && (
         <div className="flex flex-col items-center gap-3 p-10 text-gray-500">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
-          <p>명함들을 인식하는 중… (여러 장이면 조금 걸려요)</p>
+          <p>명함들을 인식하는 중…</p>
         </div>
-      ) : (
-        <CameraCapture label="스캔 촬영" onSelect={handle} />
+      )}
+
+      {phase === "review" && (
+        <>
+          <div className="rounded-lg border border-gray-200 p-3">
+            <TagSelector value={tagIds} onChange={setTagIds} />
+            <p className="mt-1 text-xs text-gray-400">선택한 태그가 저장하는 모든 명함에 적용됩니다.</p>
+          </div>
+
+          <p className="text-sm font-medium text-gray-700">인식된 명함 {items.length}장</p>
+          <ul className="flex flex-col gap-2">
+            {items.map((it, i) => {
+              const e = it.extraction;
+              const company = e.company_ko || e.company_en || "";
+              const title = e.title_ko || e.title_en || "";
+              const contact = e.mobile || e.email || "";
+              return (
+                <li
+                  key={i}
+                  className={
+                    "flex gap-3 rounded-lg border p-2 " +
+                    (it.include ? "border-blue-300 bg-blue-50/40" : "border-gray-200 opacity-50")
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => setItems((a) => a.map((x, idx) => (idx === i ? { ...x, include: !x.include } : x)))}
+                    className={
+                      "mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border text-[11px] " +
+                      (it.include ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 text-transparent")
+                    }
+                  >
+                    ✓
+                  </button>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={it.url} alt="" className="h-16 w-24 flex-shrink-0 rounded border border-gray-200 object-cover" />
+                  <div className="min-w-0 flex-1 text-sm">
+                    <div className="font-medium text-gray-900">{displayName(e)}</div>
+                    {(company || title) && (
+                      <div className="truncate text-gray-500">{[company, title].filter(Boolean).join(" · ")}</div>
+                    )}
+                    {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
+                    <button
+                      type="button"
+                      onClick={() => setCropIdx(i)}
+                      className="mt-1 text-xs text-blue-600 underline"
+                    >
+                      사진 크롭
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {phase === "review" && (
+        <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md border-t border-gray-200 bg-white p-4">
+          <button
+            type="button"
+            onClick={saveAll}
+            disabled={saving || selectedCount === 0}
+            className="w-full rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-40"
+          >
+            {saving ? `저장 중… (${progress}/${selectedCount})` : `${selectedCount}개 저장`}
+          </button>
+        </div>
+      )}
+
+      {cropIdx !== null && scanUrl && (
+        <ImageCropper
+          src={scanUrl}
+          suggested={
+            items[cropIdx].extraction.card_bbox
+              ? {
+                  x0: items[cropIdx].extraction.card_bbox![0],
+                  y0: items[cropIdx].extraction.card_bbox![1],
+                  x1: items[cropIdx].extraction.card_bbox![2],
+                  y1: items[cropIdx].extraction.card_bbox![3],
+                }
+              : null
+          }
+          onApply={applyCrop}
+          onCancel={() => setCropIdx(null)}
+          cancelLabel="취소"
+        />
+      )}
     </main>
   );
 }

@@ -32,6 +32,27 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+// 이미지에서 정규화 bbox([x0,y0,x1,y1], 0~1) 영역을 잘라 JPEG Blob 으로
+export async function cropBboxToBlob(
+  img: HTMLImageElement,
+  bbox: [number, number, number, number],
+): Promise<Blob> {
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const [x0, y0, x1, y1] = bbox;
+  const sx = Math.max(0, Math.min(1, x0)) * W;
+  const sy = Math.max(0, Math.min(1, y0)) * H;
+  const sw = Math.max(1, (Math.min(1, x1) - Math.min(1, x0)) * W);
+  const sh = Math.max(1, (Math.min(1, y1) - Math.min(1, y0)) * H);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw);
+  canvas.height = Math.round(sh);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no canvas");
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvasToJpeg(canvas);
+}
+
 export function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(

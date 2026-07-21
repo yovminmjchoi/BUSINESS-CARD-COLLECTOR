@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
 import { createClient } from "@/lib/supabase/server";
-import { extractMultipleCards, type CardExtraction } from "@/lib/gemini";
+import { extractMultipleCards } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const BUCKET = "card-images";
-
+// 한 이미지 속 여러 명함을 추출(배열)만 반환. 크롭·저장은 클라이언트에서 처리.
 export async function POST(request: Request) {
   const supabase = await createClient();
   const {
@@ -40,43 +38,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "이미지 처리에 실패했습니다." }, { status: 400 });
   }
 
-  let cards: CardExtraction[];
   try {
-    cards = await extractMultipleCards({
+    const cards = await extractMultipleCards({
       data: buf.toString("base64"),
       mimeType: "image/jpeg",
     });
+    if (cards.length === 0) {
+      return NextResponse.json({ error: "명함을 찾지 못했습니다." }, { status: 422 });
+    }
+    return NextResponse.json({ cards });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "인식 실패" },
       { status: 502 },
     );
   }
-  if (cards.length === 0) {
-    return NextResponse.json({ error: "명함을 찾지 못했습니다." }, { status: 422 });
-  }
-
-  const { cropByBbox } = await import("@/lib/image");
-
-  // 각 명함 영역을 잘라 개별 이미지로 저장
-  const results = await Promise.all(
-    cards.map(async (extraction) => {
-      const draftId = randomUUID();
-      const imageFrontPath = `${user.id}/${draftId}/front.jpg`;
-      let region = buf;
-      if (extraction.card_bbox) {
-        try {
-          region = await cropByBbox(buf, extraction.card_bbox);
-        } catch {
-          /* 크롭 실패 시 전체 이미지 사용 */
-        }
-      }
-      await supabase.storage
-        .from(BUCKET)
-        .upload(imageFrontPath, region, { contentType: "image/jpeg", upsert: true });
-      return { draftId, imageFrontPath, extraction };
-    }),
-  );
-
-  return NextResponse.json({ cards: results });
 }
