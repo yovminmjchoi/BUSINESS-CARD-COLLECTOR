@@ -16,6 +16,7 @@ export const fetchCache = "force-no-store"; // is_primary 등 변경 즉시 반�
 const SEARCH_COLUMNS = [
   "name_ko", "name_en", "company_ko", "company_en",
   "title_ko", "title_en", "email", "person_note", "company_note",
+  "address_ko", "address_en",
 ];
 
 export default async function ListPage({
