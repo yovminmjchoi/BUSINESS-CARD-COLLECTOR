@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ReactCrop, { type Crop } from "react-image-crop";
-import { applyDocFilter, autoDetectCardBBox, canvasToJpeg, rotate90 } from "@/lib/client-image";
+import {
+  applyDocFilter,
+  autoDetectCardBBox,
+  autoDetectCardQuad,
+  bboxToQuad,
+  canvasToJpeg,
+  cropQuadToCanvas,
+  rotate90,
+  type CardQuad,
+} from "@/lib/client-image";
 
-// AI 가 감지한 명함 영역 [x0,y0,x1,y1] (0~1). 도착하면 크롭 박스를 자동으로 맞춤.
+// AI 가 감지한 명함 영역 [x0,y0,x1,y1] (0~1). 도착하면 크롭 영역을 자동으로 맞춤.
 export interface SuggestedBox {
   x0: number;
   y0: number;
@@ -12,8 +20,6 @@ export interface SuggestedBox {
   y1: number;
 }
 
-// 문서 스캔 정리 필터 — 오래되고 얼룩진 명함을 깔끔하게.
-// CSS 필터 문자열은 미리보기(<img>)와 최종 캔버스(ctx.filter)에 동일 적용 → WYSIWYG.
 type FilterMode = "none" | "color" | "doc";
 const FILTERS: { id: FilterMode; label: string; css: string }[] = [
   { id: "none", label: "원본", css: "none" },
@@ -21,7 +27,32 @@ const FILTERS: { id: FilterMode; label: string; css: string }[] = [
   { id: "doc", label: "흑백 문서", css: "grayscale(1) brightness(1.18) contrast(1.8)" },
 ];
 
-// 전체 화면 크롭 오버레이. 모서리/변 드래그로 영역 조절 (스캔 앱 스타일).
+const DEFAULT_QUAD: CardQuad = [
+  { x: 0.04, y: 0.04 },
+  { x: 0.96, y: 0.04 },
+  { x: 0.96, y: 0.96 },
+  { x: 0.04, y: 0.96 },
+];
+
+const CORNER_LABELS = ["왼쪽 위", "오른쪽 위", "오른쪽 아래", "왼쪽 아래"];
+
+function cloneQuad(quad: CardQuad): CardQuad {
+  return quad.map((p) => ({ ...p })) as CardQuad;
+}
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function suggestedToQuad(suggested: SuggestedBox): CardQuad {
+  const x0 = Math.max(0, suggested.x0 - 0.03);
+  const y0 = Math.max(0, suggested.y0 - 0.03);
+  const x1 = Math.min(1, suggested.x1 + 0.03);
+  const y1 = Math.min(1, suggested.y1 + 0.03);
+  return bboxToQuad([x0, y0, x1, y1]);
+}
+
+// 전체 화면 크롭 오버레이. 네 모서리를 잡아 기울어진 명함을 반듯하게 펴서 저장한다.
 export default function ImageCropper({
   src,
   suggested,
@@ -37,55 +68,69 @@ export default function ImageCropper({
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [displaySrc, setDisplaySrc] = useState(src);
-  const [crop, setCrop] = useState<Crop>({
-    unit: "%",
-    x: 4,
-    y: 4,
-    width: 92,
-    height: 92,
-  });
+  const [quad, setQuad] = useState<CardQuad>(() => cloneQuad(DEFAULT_QUAD));
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<FilterMode>("none");
   const [autoMsg, setAutoMsg] = useState("");
-  const touchedRef = useRef(false); // 사용자가 박스를 만졌는지
-  const autoTriedRef = useRef(false); // 로드 직후 자동 감지 1회만
+  const touchedRef = useRef(false);
+  const autoTriedRef = useRef(false);
+  const autoAppliedRef = useRef(false);
+  const ignoreSuggestedRef = useRef(false);
 
   const filterCss = FILTERS.find((f) => f.id === filter)?.css ?? "none";
+  const polygon = quad.map((p) => `${p.x * 100},${p.y * 100}`).join(" ");
 
-  function applyBox(box: [number, number, number, number], markTouched: boolean) {
-    const [x0, y0, x1, y1] = box;
-    setCrop({
-      unit: "%",
-      x: x0 * 100,
-      y: y0 * 100,
-      width: Math.max(5, (x1 - x0) * 100),
-      height: Math.max(5, (y1 - y0) * 100),
-    });
-    if (markTouched) touchedRef.current = true;
-  }
+  useEffect(() => {
+    setDisplaySrc(src);
+    setQuad(cloneQuad(DEFAULT_QUAD));
+    setAutoMsg("");
+    touchedRef.current = false;
+    autoTriedRef.current = false;
+    autoAppliedRef.current = false;
+    ignoreSuggestedRef.current = false;
+  }, [src]);
 
-  // 배경 대비로 카드 영역 자동 감지 → 박스 스냅
-  function runAutoDetect() {
+  useEffect(() => {
+    if (!suggested || touchedRef.current || autoAppliedRef.current || ignoreSuggestedRef.current) return;
+    setQuad(suggestedToQuad(suggested));
+  }, [suggested]);
+
+  function applyDetected(markTouched: boolean) {
     const img = imgRef.current;
-    if (!img) return;
+    if (!img) return false;
+    const detected = autoDetectCardQuad(img);
+    if (detected) {
+      setQuad(detected);
+      autoAppliedRef.current = true;
+      if (markTouched) touchedRef.current = true;
+      return true;
+    }
     const box = autoDetectCardBBox(img);
     if (box) {
-      applyBox(box, true);
+      setQuad(bboxToQuad(box));
+      autoAppliedRef.current = true;
+      if (markTouched) touchedRef.current = true;
+      return true;
+    }
+    return false;
+  }
+
+  function runAutoDetect() {
+    if (applyDetected(true)) {
       setAutoMsg("");
     } else {
-      setAutoMsg("자동 감지가 애매해요 — 모서리를 손으로 맞춰주세요.");
+      setAutoMsg("자동 감지가 애매해요. 모서리 점을 손으로 맞춰주세요.");
       setTimeout(() => setAutoMsg(""), 2500);
     }
   }
 
-  // 이미지 로드 시: AI 제안 박스가 없으면(뒷면·일괄 등) 자동 감지 1회 시도
   function handleImgLoad() {
-    if (autoTriedRef.current || suggested || touchedRef.current) return;
+    if (autoTriedRef.current || touchedRef.current) return;
     autoTriedRef.current = true;
-    const img = imgRef.current;
-    if (!img) return;
-    const box = autoDetectCardBBox(img);
-    if (box) applyBox(box, false);
+    if (!applyDetected(false) && suggested && !ignoreSuggestedRef.current) {
+      setQuad(suggestedToQuad(suggested));
+    }
   }
 
   async function rotate() {
@@ -93,57 +138,59 @@ export default function ImageCropper({
     try {
       const rotated = await rotate90(displaySrc);
       setDisplaySrc(rotated);
-      touchedRef.current = true; // 회전 후엔 자동 제안 박스 무시
-      setCrop({ unit: "%", x: 4, y: 4, width: 92, height: 92 });
+      setQuad(cloneQuad(DEFAULT_QUAD));
+      touchedRef.current = false;
+      autoTriedRef.current = false;
+      autoAppliedRef.current = false;
+      ignoreSuggestedRef.current = true;
     } finally {
       setBusy(false);
     }
   }
 
-  // AI 감지 박스 도착 시, 사용자가 아직 안 만졌으면 자동 스냅 (여유 3%)
+  function movePoint(index: number, clientX: number, clientY: number) {
+    const img = imgRef.current;
+    if (!img) return;
+    const rect = img.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const x = clamp01((clientX - rect.left) / rect.width);
+    const y = clamp01((clientY - rect.top) / rect.height);
+    setQuad((cur) => cur.map((p, i) => (i === index ? { x, y } : p)) as CardQuad);
+    touchedRef.current = true;
+  }
+
   useEffect(() => {
-    if (!suggested || touchedRef.current) return;
-    const M = 0.03;
-    const x = Math.max(0, suggested.x0 - M) * 100;
-    const y = Math.max(0, suggested.y0 - M) * 100;
-    const x1 = Math.min(1, suggested.x1 + M) * 100;
-    const y1 = Math.min(1, suggested.y1 + M) * 100;
-    setCrop({ unit: "%", x, y, width: Math.max(5, x1 - x), height: Math.max(5, y1 - y) });
-  }, [suggested]);
+    if (dragIndex === null) return;
+    const onMove = (event: PointerEvent) => {
+      event.preventDefault();
+      movePoint(dragIndex, event.clientX, event.clientY);
+    };
+    const onUp = () => setDragIndex(null);
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [dragIndex]);
+
+  function nudgePoint(index: number, dx: number, dy: number) {
+    setQuad((cur) =>
+      cur.map((p, i) =>
+        i === index ? { x: clamp01(p.x + dx), y: clamp01(p.y + dy) } : p,
+      ) as CardQuad,
+    );
+    touchedRef.current = true;
+  }
 
   async function apply() {
     const img = imgRef.current;
     if (!img) return;
     setBusy(true);
     try {
-      const nW = img.naturalWidth;
-      const nH = img.naturalHeight;
-      // 현재 크롭 박스(crop)를 원본 픽셀로 환산 (단위 %/px 모두 대응)
-      let sx: number, sy: number, sw: number, sh: number;
-      if (crop.unit === "%") {
-        sx = (crop.x / 100) * nW;
-        sy = (crop.y / 100) * nH;
-        sw = (crop.width / 100) * nW;
-        sh = (crop.height / 100) * nH;
-      } else {
-        const kx = nW / img.width;
-        const ky = nH / img.height;
-        sx = crop.x * kx;
-        sy = crop.y * ky;
-        sw = crop.width * kx;
-        sh = crop.height * ky;
-      }
-      if (sw < 1 || sh < 1) {
-        sx = 0; sy = 0; sw = nW; sh = nH; // 박스가 없으면 전체
-      }
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(sw));
-      canvas.height = Math.max(1, Math.round(sh));
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("no canvas");
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-      // 문서 정리 필터를 픽셀 단위로 결과에 굽기 (미리보기 CSS 필터와 동일 수식).
-      // ctx.filter 대신 수동 계산 → 구형 iOS Safari 에서도 저장본에 반영됨.
+      const canvas = cropQuadToCanvas(img, quad);
       applyDocFilter(canvas, filter);
       onApply(await canvasToJpeg(canvas));
     } catch {
@@ -155,7 +202,7 @@ export default function ImageCropper({
     <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
       <div className="flex items-center justify-between gap-2 p-4 text-white">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {suggested ? "명함 영역 자동 감지됨 · 필요하면 조절" : "명함 영역을 맞추세요"}
+          {suggested ? "명함 영역 자동 감지됨 · 필요하면 조절" : "명함 모서리를 맞추세요"}
         </span>
         <button
           type="button"
@@ -163,7 +210,7 @@ export default function ImageCropper({
           disabled={busy}
           className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
         >
-          ✨ 자동 맞춤
+          자동 맞춤
         </button>
         <button
           type="button"
@@ -171,7 +218,7 @@ export default function ImageCropper({
           disabled={busy}
           className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
         >
-          ↻ 회전
+          회전
         </button>
       </div>
       {autoMsg && (
@@ -179,27 +226,50 @@ export default function ImageCropper({
       )}
 
       <div className="flex flex-1 items-center justify-center overflow-hidden p-2">
-        <ReactCrop
-          crop={crop}
-          onChange={(c) => {
-            touchedRef.current = true;
-            setCrop(c);
-          }}
-          keepSelection
-        >
+        <div className="relative inline-block max-h-[70vh] max-w-full touch-none select-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
             src={displaySrc}
             alt="크롭 대상"
+            draggable={false}
             onLoad={handleImgLoad}
-            className="max-h-[70vh] w-auto max-w-full"
+            className="block max-h-[70vh] w-auto max-w-full"
             style={{ filter: filterCss }}
           />
-        </ReactCrop>
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <polygon points={polygon} fill="rgba(37,99,235,0.16)" stroke="white" strokeWidth="0.7" />
+            <polyline points={`${polygon} ${quad[0].x * 100},${quad[0].y * 100}`} fill="none" stroke="#2563eb" strokeWidth="0.9" />
+          </svg>
+          {quad.map((p, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`${CORNER_LABELS[i]} 모서리`}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                setDragIndex(i);
+                movePoint(i, event.clientX, event.clientY);
+              }}
+              onKeyDown={(event) => {
+                const amount = event.shiftKey ? 0.025 : 0.008;
+                if (event.key === "ArrowLeft") nudgePoint(i, -amount, 0);
+                if (event.key === "ArrowRight") nudgePoint(i, amount, 0);
+                if (event.key === "ArrowUp") nudgePoint(i, 0, -amount);
+                if (event.key === "ArrowDown") nudgePoint(i, 0, amount);
+              }}
+              className="absolute h-9 w-9 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-600 shadow-lg outline-none ring-blue-300 focus:ring-4"
+              style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* 문서 정리 필터 선택 */}
       <div className="flex justify-center gap-2 px-4 pb-1">
         {FILTERS.map((f) => (
           <button
@@ -233,7 +303,7 @@ export default function ImageCropper({
           disabled={busy}
           className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
         >
-          {busy ? "처리 중…" : "크롭 적용"}
+          {busy ? "처리 중..." : "크롭 적용"}
         </button>
       </div>
     </div>
