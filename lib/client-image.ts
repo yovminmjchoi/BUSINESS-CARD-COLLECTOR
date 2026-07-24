@@ -196,7 +196,7 @@ export function detectCardRegions(
   }
 
   // 엣지 에너지를 셀 그리드에 집계
-  const cell = 8;
+  const cell = 10;
   const cols = Math.ceil(w / cell);
   const rows = Math.ceil(h / cell);
   const energy = new Float32Array(cols * rows);
@@ -205,10 +205,10 @@ export function detectCardRegions(
       const idx = y * w + x;
       const gx = Math.abs(gray[idx + 1] - gray[idx - 1]);
       const gy = Math.abs(gray[idx + w] - gray[idx - w]);
-      if (gx + gy > 36) energy[Math.floor(y / cell) * cols + Math.floor(x / cell)] += 1;
+      if (gx + gy > 30) energy[Math.floor(y / cell) * cols + Math.floor(x / cell)] += 1;
     }
   }
-  const minPix = cell * cell * 0.06;
+  const minPix = cell * cell * 0.05;
   const content = new Uint8Array(cols * rows);
   for (let i = 0; i < energy.length; i++) content[i] = energy[i] >= minPix ? 1 : 0;
 
@@ -265,12 +265,12 @@ export function detectCardRegions(
       const bw = c.maxc - c.minc + 1;
       const bh = c.maxr - c.minr + 1;
       const area = bw * bh;
-      if (c.n < 6) return false;
-      if (area < gridArea * 0.015) return false; // 너무 작음
-      if (area > gridArea * 0.75) return false; // 거의 전체
+      if (c.n < 5) return false;
+      if (area < gridArea * 0.012) return false; // 너무 작음
+      if (area > gridArea * 0.82) return false; // 거의 전체
       const ar = bw / bh;
-      if (ar < 0.25 || ar > 4) return false; // 카드 비율 벗어남
-      if (c.n / area < 0.35) return false; // 성긴 잡음
+      if (ar < 0.22 || ar > 4.5) return false; // 카드 비율 벗어남
+      if (c.n / area < 0.32) return false; // 성긴 잡음
       return true;
     })
     .map((c) => {

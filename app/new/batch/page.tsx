@@ -431,6 +431,7 @@ export default function BatchNewPage() {
       backScanImgRef.current = img;
 
       let backs: BackCard[] = [];
+      let source = "";
 
       // 1) 앱이 직접 카드 영역을 나눔(글자 밀도) → 각 영역을 개별 추출 (앞면 개별 촬영과 동일)
       const regions = detectCardRegions(img);
@@ -453,10 +454,12 @@ export default function BatchNewPage() {
           }),
         );
         backs = built.filter((x): x is BackCard => x !== null);
+        if (backs.length >= 2) source = `앱 분할 ${regions.length}칸`;
       }
 
       // 2) 분할이 잘 안 되면 기존 AI 멀티 인식으로 폴백
       if (backs.length < 2) {
+        source = `AI 인식(분할 ${regions.length}칸)`;
         const form = new FormData();
         form.append("front", small);
         form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
@@ -476,7 +479,7 @@ export default function BatchNewPage() {
           }),
         );
       }
-      matchBacks(backs);
+      matchBacks(backs, source);
     } catch {
       setError("뒷장 처리 중 오류가 발생했습니다. 다시 시도하세요.");
     } finally {
@@ -485,7 +488,7 @@ export default function BatchNewPage() {
   }
 
   // 뒷장 카드들을 앞면 명함에 내용(전화·이메일·회사·이름)으로 짝짓기
-  function matchBacks(backs: BackCard[]) {
+  function matchBacks(backs: BackCard[], source = "") {
     const cur = itemsRef.current;
     const pairs: { bi: number; fi: number; s: number }[] = [];
     backs.forEach((b, bi) => {
@@ -524,7 +527,8 @@ export default function BatchNewPage() {
     const leftovers = backs.filter((_, bi) => !usedBack.has(bi));
     setUnmatchedBacks((prev) => [...prev, ...leftovers]);
     setMatchMsg(
-      `뒷장 ${backs.length}장 중 ${assign.size}장 자동 매칭됨` +
+      (source ? `[${source}] ` : "") +
+        `뒷장 ${backs.length}장 중 ${assign.size}장 자동 매칭됨` +
         (leftovers.length > 0 ? ` · ${leftovers.length}장은 아래에서 직접 지정하세요.` : ""),
     );
   }
