@@ -21,6 +21,19 @@ export default async function SettingsPage() {
         </div>
 
         <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-gray-500">내 명함</span>
+          <a
+            href="/me"
+            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-center text-sm text-gray-700"
+          >
+            내 정보 편집 (메일 서명)
+          </a>
+          <p className="text-xs text-gray-400">
+            메일 보낼 때 본문에 자동으로 붙는 내 서명입니다.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2">
           <span className="text-xs font-medium text-gray-500">내보내기</span>
           <a
             href="/api/export/csv?scope=primary"
