@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
 import ImageCropper from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
-import { loadProfile, buildMailto, hasProfile, type MyProfile } from "@/lib/profile";
+import { loadProfile, buildMailto, hasSignature, type MyProfile } from "@/lib/profile";
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "family_name_ko", label: "성 (한글)" },
@@ -285,7 +285,7 @@ export default function CardDetail({
             >
               ✉️ 메일 보내기
             </a>
-            {profile && !hasProfile(profile) && (
+            {profile && !hasSignature(profile) && (
               <Link href="/me" className="text-center text-xs text-gray-400 underline">
                 내 서명 설정 (설정 › 내 정보)
               </Link>
