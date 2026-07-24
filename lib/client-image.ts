@@ -183,6 +183,37 @@ export async function cropQuadToBlob(img: HTMLImageElement, quad: CardQuad): Pro
   return canvasToJpeg(cropQuadToCanvas(img, quad));
 }
 
+// bbox 영역을 (여백 포함해) 잘라, 그 안에서 카드의 네 꼭지점을 찾아 반듯하게 펴서 반환.
+// 꼭지점을 못 찾으면(저대비 등) 축 정렬 크롭으로 폴백 → 최소한 잘리진 않음.
+// 원본 이미지는 호출부에서 그대로 보관하므로, 자동 보정이 어긋나도 재크롭으로 되돌릴 수 있음.
+export async function deskewRegionToBlob(
+  img: HTMLImageElement,
+  bbox: [number, number, number, number],
+  expand = 0.05,
+): Promise<Blob> {
+  const [x0, y0, x1, y1] = bbox;
+  const ex0 = Math.max(0, x0 - expand);
+  const ey0 = Math.max(0, y0 - expand);
+  const ex1 = Math.min(1, x1 + expand);
+  const ey1 = Math.min(1, y1 + expand);
+  const regionBlob = await cropBboxToBlob(img, [ex0, ey0, ex1, ey1]);
+  let regionImg: HTMLImageElement;
+  const regionUrl = URL.createObjectURL(regionBlob);
+  try {
+    regionImg = await loadImage(regionUrl);
+  } catch {
+    URL.revokeObjectURL(regionUrl);
+    return cropBboxToBlob(img, bbox);
+  }
+  try {
+    const quad = autoDetectCardQuad(regionImg);
+    if (quad) return await cropQuadToBlob(regionImg, quad);
+    return await cropBboxToBlob(img, bbox);
+  } finally {
+    URL.revokeObjectURL(regionUrl);
+  }
+}
+
 // 이미지를 시계방향 90° 회전한 data URL 반환 (크롭 화면 방향 조정용)
 export async function rotate90(src: string): Promise<string> {
   const img = await loadImage(src);

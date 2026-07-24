@@ -6,7 +6,7 @@ import Link from "next/link";
 import CameraCapture from "@/components/CameraCapture";
 import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
 import { pickUnusedColor, type Tag } from "@/components/TagSelector";
-import { downscale, loadImage, cropBboxToBlob, detectCardRegions } from "@/lib/client-image";
+import { downscale, loadImage, cropBboxToBlob, detectCardRegions, deskewRegionToBlob } from "@/lib/client-image";
 import { digitsOnly, pickCompanyNormalized, trigramSimilarity } from "@/lib/normalize";
 import type { CardExtraction } from "@/lib/gemini";
 
@@ -188,8 +188,9 @@ export default function BatchNewPage() {
       const cards: CardExtraction[] = data.cards;
       const built: Item[] = await Promise.all(
         cards.map(async (e) => {
+          // 카드 위치가 있으면 그 카드를 반듯하게 펴서(원근 보정) 저장. 없으면 전체 그대로.
           const blob = e.card_bbox
-            ? await cropBboxToBlob(img, e.card_bbox)
+            ? await deskewRegionToBlob(img, e.card_bbox)
             : await cropBboxToBlob(img, [0, 0, 1, 1]);
           return { extraction: e, blob, url: URL.createObjectURL(blob), include: true, tagIds: [] };
         }),
@@ -455,7 +456,8 @@ export default function BatchNewPage() {
       if (regions.length >= 2) {
         const built = await Promise.all(
           regions.map(async (bbox) => {
-            const blob = await cropBboxToBlob(img, bbox);
+            // 각 뒷면을 반듯하게 펴서(원근 보정) 저장 + 그 이미지로 추출
+            const blob = await deskewRegionToBlob(img, bbox);
             const f = new FormData();
             f.append("mode", "detect");
             f.append("front", new File([blob], "b.jpg", { type: "image/jpeg" }));
@@ -491,7 +493,10 @@ export default function BatchNewPage() {
         backs = await Promise.all(
           cards.map(async (e) => {
             const bbox: [number, number, number, number] = e.card_bbox ?? [0, 0, 1, 1];
-            const blob = await cropBboxToBlob(img, bbox);
+            // 실제 카드 영역이면 펴서 저장, 전체 이미지에 가까우면 그대로
+            const blob = isWholeImageBox(bbox)
+              ? await cropBboxToBlob(img, bbox)
+              : await deskewRegionToBlob(img, bbox);
             return { extraction: e, blob, url: URL.createObjectURL(blob), bbox, srcImg: img };
           }),
         );
