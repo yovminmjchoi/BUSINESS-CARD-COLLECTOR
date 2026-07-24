@@ -104,7 +104,7 @@ export default function MyProfilePage() {
           </div>
           <p className="text-xs text-gray-400">
             {profile.mailApp === "outlook"
-              ? "Outlook 웹으로 열려요. 회사 Office365에 로그인돼 있으면 회사 주소로 발송됩니다."
+              ? "Outlook 웹으로 열려요. 회사 보안에서 막히면 명함 상세의 초안 복사를 쓰세요."
               : "폰 기본 메일 앱으로 열려요. 보낸사람은 기본 계정이에요."}
           </p>
         </div>
