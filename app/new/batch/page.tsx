@@ -14,6 +14,8 @@ interface BackCard {
   extraction: CardExtraction;
   blob: Blob;
   url: string;
+  bbox: [number, number, number, number];
+  srcImg: HTMLImageElement;
 }
 
 // 앞면(F)과 뒷면(B)이 같은 명함일 가능성 점수. 전화·이메일 일치는 강한 신호.
@@ -48,6 +50,9 @@ interface Item {
   dup?: { name: string; company: string; reasons: string[]; strong: boolean } | null; // 중복 후보
   personNote?: string;
   companyNote?: string;
+  // 뒷면 재크롭 시 여백 포함해 다시 자를 수 있도록 원본 이미지·영역 보관
+  backSrcImg?: HTMLImageElement;
+  backBbox?: [number, number, number, number];
 }
 
 // 확인/수정 폼 필드 (성/이름 분리, 전체이름은 자동 합성)
@@ -110,10 +115,11 @@ export default function BatchNewPage() {
   const backScanImgRef = useRef<HTMLImageElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const backTargetRef = useRef<number | null>(null);
+  const backCropSrcImgRef = useRef<HTMLImageElement | null>(null); // 개별 뒷면 추가 시 원본(전체) 사진
   const itemsRef = useRef<Item[]>([]);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
-  const [backEditCrop, setBackEditCrop] = useState<{ idx: number; src: string } | null>(null); // 기존 뒷면 재크롭
+  const [backEditCrop, setBackEditCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null); // 기존 뒷면 재크롭
   const [openIdx, setOpenIdx] = useState<number | null>(null); // 정보 확인/수정 펼친 카드
   const [unmatchedBacks, setUnmatchedBacks] = useState<BackCard[]>([]); // 짝 못 찾은 뒷장
   const [backSheetBusy, setBackSheetBusy] = useState(false);
@@ -315,7 +321,10 @@ export default function BatchNewPage() {
     if (i === null) return;
     setError("");
     const small = await downscale(file);
-    setBackCrop({ idx: i, src: URL.createObjectURL(small) });
+    const url = URL.createObjectURL(small);
+    // 재크롭 시 전체 사진을 다시 볼 수 있도록 원본 이미지 보관
+    backCropSrcImgRef.current = await loadImage(url);
+    setBackCrop({ idx: i, src: url });
   }
 
   function closeBackCrop() {
@@ -327,6 +336,8 @@ export default function BatchNewPage() {
   async function finishBack(blob: Blob) {
     if (!backCrop) return;
     const i = backCrop.idx;
+    const srcImg = backCropSrcImgRef.current;
+    backCropSrcImgRef.current = null;
     closeBackCrop();
     setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: true } : x)));
     try {
@@ -346,7 +357,17 @@ export default function BatchNewPage() {
           const { merged, filled } = backEx
             ? mergeEmpty(x.extraction, backEx)
             : { merged: x.extraction, filled: 0 };
-          return { ...x, extraction: merged, backBlob: blob, backUrl: bUrl, backBusy: false, backFilled: filled };
+          return {
+            ...x,
+            extraction: merged,
+            backBlob: blob,
+            backUrl: bUrl,
+            backBusy: false,
+            backFilled: filled,
+            // 원본 전체 사진 보관 → 재크롭 시 전체를 다시 볼 수 있음
+            backSrcImg: srcImg ?? undefined,
+            backBbox: srcImg ? [0, 0, 1, 1] : undefined,
+          };
         }),
       );
     } catch {
@@ -355,21 +376,51 @@ export default function BatchNewPage() {
     }
   }
 
-  // 이미 붙은 뒷면 이미지를 다시 크롭/회전 (재추출 없이 이미지만 교체)
-  function openBackCrop(i: number) {
-    const url = itemsRef.current[i]?.backUrl;
-    if (!url) return;
-    setBackEditCrop({ idx: i, src: url });
+  // 이미 붙은 뒷면 이미지를 다시 크롭/회전 (재추출 없이 이미지만 교체).
+  // 원본 이미지가 있으면 여백 포함 영역을 열어(앞면처럼) 밖으로도 조절 가능.
+  async function openBackCrop(i: number) {
+    const it = itemsRef.current[i];
+    if (!it || !it.backBlob) return;
+    if (it.backSrcImg && it.backBbox) {
+      const [x0, y0, x1, y1] = it.backBbox;
+      const cw = x1 - x0;
+      const ch = y1 - y0;
+      const mx = Math.min(0.25, cw * 0.25);
+      const my = Math.min(0.45, ch * 0.9);
+      const rx0 = Math.max(0, x0 - mx);
+      const ry0 = Math.max(0, y0 - my);
+      const rx1 = Math.min(1, x1 + mx);
+      const ry1 = Math.min(1, y1 + my);
+      const regionBlob = await cropBboxToBlob(it.backSrcImg, [rx0, ry0, rx1, ry1]);
+      const src = URL.createObjectURL(regionBlob);
+      const rw = rx1 - rx0;
+      const rh = ry1 - ry0;
+      setBackEditCrop({
+        idx: i,
+        src,
+        suggested: { x0: (x0 - rx0) / rw, y0: (y0 - ry0) / rh, x1: (x1 - rx0) / rw, y1: (y1 - ry0) / rh },
+      });
+    } else {
+      // 원본이 없으면(구버전 등) 잘린 이미지 그대로 재크롭
+      setBackEditCrop({ idx: i, src: URL.createObjectURL(it.backBlob), suggested: null });
+    }
+  }
+
+  function closeBackEditCrop() {
+    if (backEditCrop) URL.revokeObjectURL(backEditCrop.src);
+    setBackEditCrop(null);
   }
 
   function applyBackRecrop(blob: Blob) {
     if (!backEditCrop) return;
     const i = backEditCrop.idx;
+    URL.revokeObjectURL(backEditCrop.src);
     setBackEditCrop(null);
     setItems((arr) =>
       arr.map((x, idx) => {
         if (idx !== i) return x;
         if (x.backUrl) URL.revokeObjectURL(x.backUrl);
+        // backSrcImg·backBbox 는 유지 → 다음 재크롭도 여백 포함해 열림
         return { ...x, backBlob: blob, backUrl: URL.createObjectURL(blob) };
       }),
     );
@@ -399,10 +450,9 @@ export default function BatchNewPage() {
       const cards: CardExtraction[] = data.cards ?? [];
       const backs: BackCard[] = await Promise.all(
         cards.map(async (e) => {
-          const blob = e.card_bbox
-            ? await cropBboxToBlob(img, e.card_bbox)
-            : await cropBboxToBlob(img, [0, 0, 1, 1]);
-          return { extraction: e, blob, url: URL.createObjectURL(blob) };
+          const bbox: [number, number, number, number] = e.card_bbox ?? [0, 0, 1, 1];
+          const blob = await cropBboxToBlob(img, bbox);
+          return { extraction: e, blob, url: URL.createObjectURL(blob), bbox, srcImg: img };
         }),
       );
       matchBacks(backs);
@@ -439,7 +489,15 @@ export default function BatchNewPage() {
       const b = backs[assign.get(fi)!];
       if (it.backUrl) URL.revokeObjectURL(it.backUrl);
       const { merged, filled } = mergeEmpty(it.extraction, b.extraction);
-      return { ...it, extraction: merged, backBlob: b.blob, backUrl: b.url, backFilled: filled };
+      return {
+        ...it,
+        extraction: merged,
+        backBlob: b.blob,
+        backUrl: b.url,
+        backFilled: filled,
+        backSrcImg: b.srcImg,
+        backBbox: b.bbox,
+      };
     });
     setItems(newItems);
     const leftovers = backs.filter((_, bi) => !usedBack.has(bi));
@@ -459,7 +517,15 @@ export default function BatchNewPage() {
         if (idx !== fi) return it;
         if (it.backUrl) URL.revokeObjectURL(it.backUrl);
         const { merged, filled } = mergeEmpty(it.extraction, b.extraction);
-        return { ...it, extraction: merged, backBlob: b.blob, backUrl: b.url, backFilled: filled };
+        return {
+          ...it,
+          extraction: merged,
+          backBlob: b.blob,
+          backUrl: b.url,
+          backFilled: filled,
+          backSrcImg: b.srcImg,
+          backBbox: b.bbox,
+        };
       }),
     );
     setUnmatchedBacks((prev) => prev.filter((_, i) => i !== leftIdx));
@@ -879,8 +945,9 @@ export default function BatchNewPage() {
       {backEditCrop && (
         <ImageCropper
           src={backEditCrop.src}
+          suggested={backEditCrop.suggested}
           onApply={applyBackRecrop}
-          onCancel={() => setBackEditCrop(null)}
+          onCancel={closeBackEditCrop}
           cancelLabel="취소"
         />
       )}
