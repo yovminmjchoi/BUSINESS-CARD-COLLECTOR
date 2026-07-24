@@ -7,7 +7,33 @@ import CameraCapture from "@/components/CameraCapture";
 import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
 import { pickUnusedColor, type Tag } from "@/components/TagSelector";
 import { downscale, loadImage, cropBboxToBlob } from "@/lib/client-image";
+import { digitsOnly, pickCompanyNormalized, trigramSimilarity } from "@/lib/normalize";
 import type { CardExtraction } from "@/lib/gemini";
+
+interface BackCard {
+  extraction: CardExtraction;
+  blob: Blob;
+  url: string;
+}
+
+// 앞면(F)과 뒷면(B)이 같은 명함일 가능성 점수. 전화·이메일 일치는 강한 신호.
+function backMatchScore(F: CardExtraction, B: CardExtraction): number {
+  let s = 0;
+  const fe = (F.email ?? "").toLowerCase().trim();
+  const be = (B.email ?? "").toLowerCase().trim();
+  if (fe && be && fe === be) s += 100;
+  const fp = [F.mobile, F.office_phone, F.fax].map(digitsOnly).filter((x) => x.length >= 7);
+  const bp = [B.mobile, B.office_phone, B.fax].map(digitsOnly).filter((x) => x.length >= 7);
+  if (fp.some((p) => bp.includes(p))) s += 100;
+  const fc = pickCompanyNormalized(F.company_ko, F.company_en);
+  const bc = pickCompanyNormalized(B.company_ko, B.company_en);
+  if (fc && bc && fc === bc) s += 40;
+  const fn = F.name_en || F.name_ko || "";
+  const bn = B.name_en || B.name_ko || "";
+  s += trigramSimilarity(fn, bn) * 30;
+  return s;
+}
+const MATCH_THRESHOLD = 60; // 전화/이메일(100) 또는 회사+이름유사 조합
 
 interface Item {
   extraction: CardExtraction;
@@ -81,11 +107,16 @@ export default function BatchNewPage() {
   const [newTag, setNewTag] = useState("");
   const [panelNewTag, setPanelNewTag] = useState(""); // 카드별 패널에서 새 태그 입력
   const scanImgRef = useRef<HTMLImageElement | null>(null);
+  const backScanImgRef = useRef<HTMLImageElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const backTargetRef = useRef<number | null>(null);
+  const itemsRef = useRef<Item[]>([]);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
   const [openIdx, setOpenIdx] = useState<number | null>(null); // 정보 확인/수정 펼친 카드
+  const [unmatchedBacks, setUnmatchedBacks] = useState<BackCard[]>([]); // 짝 못 찾은 뒷장
+  const [backSheetBusy, setBackSheetBusy] = useState(false);
+  const [matchMsg, setMatchMsg] = useState("");
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -93,6 +124,10 @@ export default function BatchNewPage() {
   useEffect(() => {
     fetch("/api/tags").then((r) => r.json()).then((d) => setTagList(d.tags ?? [])).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
 
   async function handleScan(raw: File) {
     setPhase("processing");
@@ -319,6 +354,104 @@ export default function BatchNewPage() {
     }
   }
 
+  // 뒷장 시트(여러 뒷면이 한 장에) 스캔 → 인식 → 앞면과 내용으로 자동 매칭
+  async function handleBackSheet(file: File) {
+    setBackSheetBusy(true);
+    setError("");
+    setMatchMsg("");
+    try {
+      const small = await downscale(file);
+      const url = URL.createObjectURL(small);
+      const img = await loadImage(url);
+      backScanImgRef.current = img;
+
+      const form = new FormData();
+      form.append("front", small);
+      form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
+      const res = await fetch("/api/extract-multi", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "뒷장 인식에 실패했습니다.");
+        setBackSheetBusy(false);
+        return;
+      }
+      const cards: CardExtraction[] = data.cards ?? [];
+      const backs: BackCard[] = await Promise.all(
+        cards.map(async (e) => {
+          const blob = e.card_bbox
+            ? await cropBboxToBlob(img, e.card_bbox)
+            : await cropBboxToBlob(img, [0, 0, 1, 1]);
+          return { extraction: e, blob, url: URL.createObjectURL(blob) };
+        }),
+      );
+      matchBacks(backs);
+    } catch {
+      setError("뒷장 처리 중 오류가 발생했습니다. 다시 시도하세요.");
+    } finally {
+      setBackSheetBusy(false);
+    }
+  }
+
+  // 뒷장 카드들을 앞면 명함에 내용(전화·이메일·회사·이름)으로 짝짓기
+  function matchBacks(backs: BackCard[]) {
+    const cur = itemsRef.current;
+    const pairs: { bi: number; fi: number; s: number }[] = [];
+    backs.forEach((b, bi) => {
+      cur.forEach((it, fi) => {
+        if (it.backBlob) return; // 이미 뒷면 있는 명함은 건너뜀
+        const s = backMatchScore(it.extraction, b.extraction);
+        if (s >= MATCH_THRESHOLD) pairs.push({ bi, fi, s });
+      });
+    });
+    pairs.sort((a, b) => b.s - a.s);
+    const usedBack = new Set<number>();
+    const usedFront = new Set<number>();
+    const assign = new Map<number, number>(); // fi -> bi
+    for (const p of pairs) {
+      if (usedBack.has(p.bi) || usedFront.has(p.fi)) continue;
+      usedBack.add(p.bi);
+      usedFront.add(p.fi);
+      assign.set(p.fi, p.bi);
+    }
+    const newItems = cur.map((it, fi) => {
+      if (!assign.has(fi)) return it;
+      const b = backs[assign.get(fi)!];
+      if (it.backUrl) URL.revokeObjectURL(it.backUrl);
+      const { merged, filled } = mergeEmpty(it.extraction, b.extraction);
+      return { ...it, extraction: merged, backBlob: b.blob, backUrl: b.url, backFilled: filled };
+    });
+    setItems(newItems);
+    const leftovers = backs.filter((_, bi) => !usedBack.has(bi));
+    setUnmatchedBacks((prev) => [...prev, ...leftovers]);
+    setMatchMsg(
+      `뒷장 ${backs.length}장 중 ${assign.size}장 자동 매칭됨` +
+        (leftovers.length > 0 ? ` · ${leftovers.length}장은 아래에서 직접 지정하세요.` : ""),
+    );
+  }
+
+  // 짝 못 찾은 뒷장을 특정 명함에 수동 지정
+  function assignBackToCard(leftIdx: number, fi: number) {
+    const b = unmatchedBacks[leftIdx];
+    if (!b) return;
+    setItems((arr) =>
+      arr.map((it, idx) => {
+        if (idx !== fi) return it;
+        if (it.backUrl) URL.revokeObjectURL(it.backUrl);
+        const { merged, filled } = mergeEmpty(it.extraction, b.extraction);
+        return { ...it, extraction: merged, backBlob: b.blob, backUrl: b.url, backFilled: filled };
+      }),
+    );
+    setUnmatchedBacks((prev) => prev.filter((_, i) => i !== leftIdx));
+  }
+
+  function ignoreBack(leftIdx: number) {
+    setUnmatchedBacks((prev) => {
+      const b = prev[leftIdx];
+      if (b) URL.revokeObjectURL(b.url);
+      return prev.filter((_, i) => i !== leftIdx);
+    });
+  }
+
   async function openCrop(i: number) {
     const img = scanImgRef.current;
     if (!img) return;
@@ -475,6 +608,59 @@ export default function BatchNewPage() {
               </div>
             )}
           </div>
+
+          {/* 뒷장 한 번에: 시트를 뒤집어 뒷면을 한 번에 찍으면 내용으로 자동 매칭 */}
+          <div className="flex flex-col gap-2 rounded-lg border border-dashed border-gray-300 p-3">
+            <span className="text-sm font-medium text-gray-700">뒷장 한 번에 (선택)</span>
+            <p className="text-xs text-gray-400">
+              같은 명함들을 뒤집어 뒷면을 한 장에 찍으면, 전화·이메일·회사로 앞면과 자동으로 짝지어 빈 칸을 채워요. 뒷면 없으면 건너뛰면 됩니다.
+            </p>
+            {backSheetBusy ? (
+              <div className="flex items-center gap-2 py-2 text-sm text-gray-500">
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
+                뒷장 인식·매칭 중…
+              </div>
+            ) : (
+              <CameraCapture label="뒷장 촬영" onSelect={handleBackSheet} />
+            )}
+            {matchMsg && <p className="text-xs text-green-700">{matchMsg}</p>}
+          </div>
+
+          {/* 짝 못 찾은 뒷장 → 수동 지정 */}
+          {unmatchedBacks.length > 0 && (
+            <div className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <span className="text-sm font-medium text-amber-800">
+                짝을 못 찾은 뒷장 {unmatchedBacks.length}장 — 어느 명함인지 골라주세요
+              </span>
+              {unmatchedBacks.map((b, li) => (
+                <div key={li} className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={b.url} alt="뒷장" className="h-10 w-16 flex-shrink-0 rounded border border-gray-200 bg-white object-contain" />
+                  <span className="min-w-0 flex-1 truncate text-xs text-gray-600">
+                    {b.extraction.company_en || b.extraction.company_ko || b.extraction.name_en || b.extraction.email || "정보 적음"}
+                  </span>
+                  <select
+                    defaultValue=""
+                    onChange={(ev) => {
+                      const fi = Number(ev.target.value);
+                      if (!Number.isNaN(fi)) assignBackToCard(li, fi);
+                    }}
+                    className="flex-shrink-0 rounded border border-gray-300 px-1 py-1 text-xs"
+                  >
+                    <option value="" disabled>명함 선택</option>
+                    {items.map((it, fi) => (
+                      <option key={fi} value={fi}>
+                        {fi + 1}. {displayName(it.extraction)}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => ignoreBack(li)} className="flex-shrink-0 text-xs text-gray-400 underline">
+                    무시
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
           <p className="text-sm font-medium text-gray-700">인식된 명함 {items.length}장</p>
           <ul className="flex flex-col gap-2">
