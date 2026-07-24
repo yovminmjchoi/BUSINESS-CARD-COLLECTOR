@@ -79,6 +79,7 @@ export default function BatchNewPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [tagList, setTagList] = useState<Tag[]>([]);
   const [newTag, setNewTag] = useState("");
+  const [panelNewTag, setPanelNewTag] = useState(""); // 카드별 패널에서 새 태그 입력
   const scanImgRef = useRef<HTMLImageElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const backTargetRef = useRef<number | null>(null);
@@ -183,19 +184,51 @@ export default function BatchNewPage() {
     }
   }
 
-  async function createTag() {
-    const name = newTag.trim();
-    if (!name) return;
+  // 새 태그 생성(공용). 이미 있으면 그 태그 반환. 실패 시 에러 표시.
+  async function createOrGetTag(name: string): Promise<Tag | null> {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const existing = tagList.find((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing;
     const res = await fetch("/api/tags", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, color: pickUnusedColor(tagList.map((t) => t.color)) }),
+      body: JSON.stringify({ name: trimmed, color: pickUnusedColor(tagList.map((t) => t.color)) }),
     });
     const d = await res.json();
     if (res.ok && d.tag) {
       setTagList((t) => [...t, d.tag]);
-      setNewTag("");
+      return d.tag as Tag;
     }
+    if (res.status === 409) {
+      // 서버엔 있는데 목록엔 아직 없음 → 새로고침
+      const rr = await fetch("/api/tags").then((r) => r.json()).catch(() => null);
+      if (rr?.tags) {
+        setTagList(rr.tags);
+        return (rr.tags as Tag[]).find((t) => t.name.toLowerCase() === trimmed.toLowerCase()) ?? null;
+      }
+    }
+    setError(d.error ?? "태그 추가에 실패했어요.");
+    return null;
+  }
+
+  async function createTag() {
+    setError("");
+    const tag = await createOrGetTag(newTag);
+    if (tag) setNewTag("");
+  }
+
+  // 새 태그를 만들어 이 명함에 바로 적용
+  async function createTagForCard(i: number) {
+    setError("");
+    const tag = await createOrGetTag(panelNewTag);
+    if (!tag) return;
+    setItems((arr) =>
+      arr.map((x, idx) =>
+        idx === i && !x.tagIds.includes(tag.id) ? { ...x, tagIds: [...x.tagIds, tag.id] } : x,
+      ),
+    );
+    setPanelNewTag("");
   }
 
   function setField(i: number, key: keyof CardExtraction, value: string) {
@@ -535,6 +568,28 @@ export default function BatchNewPage() {
                     {/* 정보 확인/수정 + 메모 */}
                     {openIdx === i && (
                       <div className="mt-2 flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-2">
+                        {/* 이 명함에 새 태그 만들어 적용 */}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-medium text-gray-400">새 태그 (만들어서 이 명함에 적용)</span>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={panelNewTag}
+                              onChange={(ev) => setPanelNewTag(ev.target.value)}
+                              onKeyDown={(ev) => ev.key === "Enter" && createTagForCard(i)}
+                              placeholder="예: VIP, 후속연락"
+                              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => createTagForCard(i)}
+                              disabled={!panelNewTag.trim()}
+                              className="rounded bg-gray-900 px-3 py-1.5 text-sm text-white disabled:opacity-40"
+                            >
+                              추가
+                            </button>
+                          </div>
+                        </div>
                         {FIELDS.map(({ key, label }) => (
                           <label key={key} className="flex flex-col gap-0.5">
                             <span className="text-[11px] font-medium text-gray-400">{label}</span>
