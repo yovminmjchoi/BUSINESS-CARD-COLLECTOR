@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
 import ImageCropper from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
+import { loadProfile, buildMailto, hasProfile, type MyProfile } from "@/lib/profile";
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "family_name_ko", label: "성 (한글)" },
@@ -84,6 +85,11 @@ export default function CardDetail({
   const [showHistory, setShowHistory] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
+  const [profile, setProfile] = useState<MyProfile | null>(null);
+
+  useEffect(() => {
+    setProfile(loadProfile());
+  }, []);
   const [cropState, setCropState] = useState<{ side: "front" | "back"; src: string } | null>(null);
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
@@ -265,6 +271,28 @@ export default function CardDetail({
           <option value="review_needed">검토 필요</option>
         </select>
       </header>
+
+      {/* 메일 보내기: 상대 이메일로 폰 메일 앱 열기(내 정보=서명 자동 삽입) */}
+      {(() => {
+        const emailAddr = (form.email || (card.email as string | null) || "").trim();
+        if (!emailAddr) return null;
+        const href = profile ? buildMailto(emailAddr, profile) : `mailto:${emailAddr}`;
+        return (
+          <div className="flex flex-col gap-1">
+            <a
+              href={href}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-base font-medium text-white"
+            >
+              ✉️ 메일 보내기
+            </a>
+            {profile && !hasProfile(profile) && (
+              <Link href="/me" className="text-center text-xs text-gray-400 underline">
+                내 서명 설정 (설정 › 내 정보)
+              </Link>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 앞면 사진 + 관리 */}
       <div className="flex flex-col gap-1.5">
