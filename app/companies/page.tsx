@@ -67,10 +67,15 @@ function matchesSearch(values: (string | null | undefined)[], term: string): boo
   return values.some((value) => (value ?? "").toLowerCase().includes(term));
 }
 
-function companiesHref(q: string, sort: string): string {
+function companiesHref(
+  q: string,
+  sort: string,
+  view: "companies" | "groups" = "companies",
+): string {
   const p = new URLSearchParams();
   if (q) p.set("q", q);
   if (sort) p.set("s", sort);
+  if (view === "groups") p.set("view", "groups");
   const qs = p.toString();
   return qs ? `/companies?${qs}` : "/companies";
 }
@@ -85,7 +90,7 @@ function companyDetailHref(key: string, q: string, sort: string): string {
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; g?: string; q?: string; s?: string }>;
+  searchParams: Promise<{ c?: string; g?: string; q?: string; s?: string; view?: string }>;
 }) {
   const sp = await searchParams;
   const selected = sp.c;
@@ -93,6 +98,7 @@ export default async function CompaniesPage({
   const searchQuery = (sp.q ?? "").trim();
   const searchTerm = searchQuery.toLowerCase();
   const sortBy = sp.s ?? ""; // "" 많은순 / "name" 가나다 / "name_desc" 역순
+  const viewMode = sp.view === "groups" ? "groups" : "companies";
   const supabase = await createClient();
 
   if (selectedGroup) {
@@ -181,7 +187,7 @@ export default async function CompaniesPage({
       <main className="mx-auto min-h-screen max-w-md pb-24">
         <div className="sticky top-0 z-10 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
           <div className="flex items-center gap-3">
-            <Link href={companiesHref(searchQuery, sortBy)} className="text-sm text-gray-500">
+            <Link href={companiesHref(searchQuery, sortBy, "groups")} className="text-sm text-gray-500">
               ← 회사
             </Link>
             <h1 className="truncate text-lg font-bold">
@@ -368,7 +374,7 @@ export default async function CompaniesPage({
   const visibleStandaloneList = searchTerm
     ? standaloneList.filter((company) => matchesSearch([company.name], searchTerm))
     : standaloneList;
-  const visibleCount = visibleGroups.length + visibleStandaloneList.length;
+  const visibleCount = viewMode === "groups" ? visibleGroups.length : visibleStandaloneList.length;
 
   const SORTS = [
     { v: "", label: "많은순" },
@@ -389,7 +395,7 @@ export default async function CompaniesPage({
               return (
                 <Link
                   key={s.v}
-                  href={companiesHref(searchQuery, s.v)}
+                  href={companiesHref(searchQuery, s.v, viewMode)}
                   className={
                     "rounded-full px-2.5 py-1 text-xs " +
                     (active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600")
@@ -401,19 +407,44 @@ export default async function CompaniesPage({
             })}
           </div>
         </div>
-        <CompanySearchBar q={searchQuery} sort={sortBy} />
+        <CompanySearchBar
+          q={searchQuery}
+          sort={sortBy}
+          view={viewMode}
+          placeholder={viewMode === "groups" ? "묶음·회사·소개 검색" : "회사 검색"}
+        />
+        <div className="grid grid-cols-2 rounded-lg bg-gray-100 p-1 text-sm">
+          <Link
+            href={companiesHref(searchQuery, sortBy, "companies")}
+            className={
+              "rounded-md px-3 py-2 text-center font-medium " +
+              (viewMode === "companies" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500")
+            }
+          >
+            회사
+          </Link>
+          <Link
+            href={companiesHref(searchQuery, sortBy, "groups")}
+            className={
+              "rounded-md px-3 py-2 text-center font-medium " +
+              (viewMode === "groups" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500")
+            }
+          >
+            묶음 관리{groups.length > 0 ? ` (${groups.length})` : ""}
+          </Link>
+        </div>
         {searchQuery && (
           <p className="text-xs text-gray-400">검색 결과 {visibleCount}개</p>
         )}
       </div>
 
-      <CompanyGroupManager
-        companies={companyOptions}
-        groups={visibleGroups}
-        searchActive={Boolean(searchTerm)}
-      />
-
-      {visibleGroups.length === 0 && visibleStandaloneList.length === 0 ? (
+      {viewMode === "groups" ? (
+        <CompanyGroupManager
+          companies={companyOptions}
+          groups={visibleGroups}
+          searchActive={Boolean(searchTerm)}
+        />
+      ) : visibleStandaloneList.length === 0 ? (
         <p className="p-12 text-center text-sm text-gray-400">
           {searchTerm ? "검색 결과가 없습니다." : "아직 저장된 명함이 없습니다."}
         </p>
