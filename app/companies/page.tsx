@@ -4,21 +4,151 @@ import CardListItem, {
   type CardListData,
   type CardListTag,
 } from "@/components/CardListItem";
+import CompanyGroupManager, {
+  type CompanyGroupSummary,
+  type CompanyOption,
+} from "@/components/CompanyGroupManager";
 import TabBar from "@/components/TabBar";
 
 export const dynamic = "force-dynamic";
 
 const NONE = "__none__"; // 회사 미상 그룹 키
 
+type CardRow = Omit<CardListData, "tags"> & {
+  company_normalized: string | null;
+  card_tags: { tags: CardListTag | CardListTag[] | null }[] | null;
+};
+
+type CompanyRow = {
+  company_normalized: string | null;
+  company_ko: string | null;
+  company_en: string | null;
+};
+
+type GroupMemberRow = {
+  company_normalized: string;
+  display_name: string | null;
+};
+
+type GroupRow = {
+  id: string;
+  name: string;
+  note: string | null;
+  company_group_members: GroupMemberRow[] | null;
+};
+
+function toCards(rows: CardRow[]): CardListData[] {
+  return rows.map((row) => ({
+    id: row.id,
+    name_ko: row.name_ko,
+    name_en: row.name_en,
+    company_ko: row.company_ko,
+    company_en: row.company_en,
+    title_ko: row.title_ko,
+    title_en: row.title_en,
+    status: row.status,
+    image_front_path: row.image_front_path,
+    tags: (row.card_tags ?? []).flatMap((ct) => {
+      const tg = ct.tags;
+      if (!tg) return [];
+      return Array.isArray(tg) ? tg : [tg];
+    }),
+  }));
+}
+
+function displayCompany(row: CompanyRow): string {
+  return row.company_ko || row.company_en || "회사 미상";
+}
+
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; s?: string }>;
+  searchParams: Promise<{ c?: string; g?: string; s?: string }>;
 }) {
   const sp = await searchParams;
   const selected = sp.c;
+  const selectedGroup = sp.g;
   const sortBy = sp.s ?? ""; // "" 많은순 / "name" 가나다 / "name_desc" 역순
   const supabase = await createClient();
+
+  if (selectedGroup) {
+    const { data: groupData } = await supabase
+      .from("company_groups")
+      .select("id,name,note,company_group_members(company_normalized,display_name)")
+      .eq("id", selectedGroup)
+      .maybeSingle();
+
+    const group = groupData as unknown as GroupRow | null;
+    const members = group?.company_group_members ?? [];
+    const keys = members.map((m) => m.company_normalized).filter(Boolean);
+
+    let rows: CardRow[] = [];
+    if (keys.length > 0) {
+      const { data } = await supabase
+        .from("cards")
+        .select(
+          "id,name_ko,name_en,company_ko,company_en,title_ko,title_en,status,image_front_path,company_normalized,card_tags(tags(id,name,color))",
+        )
+        .in("company_normalized", keys)
+        .order("name_ko", { ascending: true, nullsFirst: false });
+      rows = (data ?? []) as unknown as CardRow[];
+    }
+
+    const cards = toCards(rows);
+    const thumbMap = new Map<string, string>();
+    const paths = cards
+      .map((c) => c.image_front_path)
+      .filter((p): p is string => Boolean(p));
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from("card-images")
+        .createSignedUrls(paths, 300);
+      signed?.forEach((s) => {
+        if (s.signedUrl && s.path) thumbMap.set(s.path, s.signedUrl);
+      });
+    }
+
+    return (
+      <main className="mx-auto min-h-screen max-w-md pb-24">
+        <div className="sticky top-0 z-10 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
+          <div className="flex items-center gap-3">
+            <Link href="/companies" className="text-sm text-gray-500">
+              ← 회사
+            </Link>
+            <h1 className="truncate text-lg font-bold">
+              {group?.name ?? "회사 묶음"} ({cards.length})
+            </h1>
+          </div>
+          {members.length > 0 && (
+            <p className="mt-1 truncate pl-12 text-xs text-gray-400">
+              {members.map((m) => m.display_name || m.company_normalized).join(", ")}
+            </p>
+          )}
+        </div>
+        {cards.length === 0 ? (
+          <p className="p-12 text-center text-sm text-gray-400">
+            이 묶음에 표시할 명함이 없습니다.
+          </p>
+        ) : (
+          <ul>
+            {cards.map((card) => (
+              <li key={card.id}>
+                <CardListItem
+                  card={card}
+                  thumbUrl={
+                    card.image_front_path
+                      ? thumbMap.get(card.image_front_path) ?? null
+                      : null
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        <TabBar />
+      </main>
+    );
+  }
 
   // ── 회사 상세 모드: 선택된 회사의 명함 목록 ──
   if (selected) {
@@ -33,29 +163,8 @@ export default async function CompaniesPage({
       : q.eq("company_normalized", selected);
 
     const { data } = await q;
-
-    type Row = Omit<CardListData, "tags"> & {
-      company_normalized: string | null;
-      card_tags: { tags: CardListTag | CardListTag[] | null }[] | null;
-    };
-    const rows = (data ?? []) as unknown as Row[];
-    const cards: CardListData[] = rows.map((row) => ({
-      id: row.id,
-      name_ko: row.name_ko,
-      name_en: row.name_en,
-      company_ko: row.company_ko,
-      company_en: row.company_en,
-      title_ko: row.title_ko,
-      title_en: row.title_en,
-      status: row.status,
-      image_front_path: row.image_front_path,
-      tags: (row.card_tags ?? []).flatMap((ct) => {
-        const tg = ct.tags;
-        if (!tg) return [];
-        return Array.isArray(tg) ? tg : [tg];
-      }),
-    }));
-
+    const rows = (data ?? []) as unknown as CardRow[];
+    const cards = toCards(rows);
     const title =
       cards[0]?.company_ko || cards[0]?.company_en || "회사 미상";
 
@@ -101,29 +210,25 @@ export default async function CompaniesPage({
     );
   }
 
-  // ── 회사 목록 모드: company_normalized 로 그룹핑 + 카운트 ──
+  // ── 회사 목록 모드: company_normalized 로 그룹핑 + 회사 묶음 표시 ──
   const { data } = await supabase
     .from("cards")
     .select("company_normalized,company_ko,company_en");
 
-  type CRow = {
-    company_normalized: string | null;
-    company_ko: string | null;
-    company_en: string | null;
-  };
-  const groups = new Map<string, { name: string; count: number }>();
-  for (const row of (data ?? []) as CRow[]) {
+  const companies = new Map<string, { name: string; count: number }>();
+  for (const row of (data ?? []) as CompanyRow[]) {
     const key = row.company_normalized ?? NONE;
-    const existing = groups.get(key);
-    const name = row.company_ko || row.company_en || "회사 미상";
+    const existing = companies.get(key);
+    const name = displayCompany(row);
     if (existing) {
       existing.count += 1;
       if (existing.name === "회사 미상" && name !== "회사 미상") existing.name = name;
     } else {
-      groups.set(key, { name, count: 1 });
+      companies.set(key, { name, count: 1 });
     }
   }
-  const list = [...groups.entries()].map(([key, v]) => ({ key, ...v }));
+
+  const list = [...companies.entries()].map(([key, v]) => ({ key, ...v }));
   if (sortBy === "name") {
     list.sort((a, b) => a.name.localeCompare(b.name, "ko"));
   } else if (sortBy === "name_desc") {
@@ -131,6 +236,50 @@ export default async function CompaniesPage({
   } else {
     list.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
   }
+
+  const { data: groupData, error: groupError } = await supabase
+    .from("company_groups")
+    .select("id,name,note,company_group_members(company_normalized,display_name)")
+    .order("name");
+
+  const rawGroups = groupError ? [] : ((groupData ?? []) as unknown as GroupRow[]);
+  const companyByKey = new Map(list.map((c) => [c.key, c]));
+  const memberLookup = new Map<string, { groupId: string; groupName: string }>();
+
+  const groups: CompanyGroupSummary[] = rawGroups.map((group) => {
+    const members = group.company_group_members ?? [];
+    for (const member of members) {
+      memberLookup.set(member.company_normalized, { groupId: group.id, groupName: group.name });
+    }
+    return {
+      id: group.id,
+      name: group.name,
+      note: group.note,
+      count: members.reduce((sum, member) => sum + (companyByKey.get(member.company_normalized)?.count ?? 0), 0),
+      memberNames: members.map((member) => companyByKey.get(member.company_normalized)?.name ?? member.display_name ?? member.company_normalized),
+    };
+  });
+
+  if (sortBy === "name") {
+    groups.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  } else if (sortBy === "name_desc") {
+    groups.sort((a, b) => b.name.localeCompare(a.name, "ko"));
+  } else {
+    groups.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
+  }
+
+  const companyOptions: CompanyOption[] = list
+    .filter((c) => c.key !== NONE)
+    .map((c) => {
+      const group = memberLookup.get(c.key);
+      return {
+        ...c,
+        groupId: group?.groupId ?? null,
+        groupName: group?.groupName ?? null,
+      };
+    });
+
+  const standaloneList = list.filter((company) => company.key === NONE || !memberLookup.has(company.key));
 
   const SORTS = [
     { v: "", label: "많은순" },
@@ -163,13 +312,15 @@ export default async function CompaniesPage({
         </div>
       </div>
 
-      {list.length === 0 ? (
+      <CompanyGroupManager companies={companyOptions} groups={groups} />
+
+      {standaloneList.length === 0 ? (
         <p className="p-12 text-center text-sm text-gray-400">
           아직 저장된 명함이 없습니다.
         </p>
       ) : (
         <ul>
-          {list.map((g) => (
+          {standaloneList.map((g) => (
             <li key={g.key}>
               <Link
                 href={`/companies?c=${encodeURIComponent(g.key)}`}
