@@ -17,3 +17,22 @@ body {
 body {
   padding-bottom: env(safe-area-inset-bottom);
 }
+
+/* 크롭 핸들: 터치로 잡기 쉽게 크게 (react-image-crop 기본은 작음) */
+.ReactCrop__drag-handle {
+  width: 30px !important;
+  height: 30px !important;
+}
+.ReactCrop__drag-handle::after {
+  width: 18px !important;
+  height: 18px !important;
+  background-color: #2563eb !important;
+  border: 2px solid #ffffff !important;
+  border-radius: 9999px !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) !important;
+  opacity: 1 !important;
+}
+/* 크롭 테두리·변(그랩 영역)도 조금 두껍게 */
+.ReactCrop__crop-selection {
+  border-width: 2px !important;
+}

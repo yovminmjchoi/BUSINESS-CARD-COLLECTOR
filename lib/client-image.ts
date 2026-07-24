@@ -101,6 +101,70 @@ export function applyDocFilter(
   ctx.putImageData(im, 0, 0);
 }
 
+// 배경과 명함을 구분해 카드가 차지하는 사각형 영역을 자동 추정 → [x0,y0,x1,y1] (0~1).
+// 명함을 비교적 단색 배경(책상 등) 위에 찍었을 때 잘 동작. 애매하면 null(수동 크롭).
+export function autoDetectCardBBox(
+  img: HTMLImageElement,
+): [number, number, number, number] | null {
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  if (!W || !H) return null;
+  const scale = Math.min(1, 320 / Math.max(W, H));
+  const w = Math.max(1, Math.round(W * scale));
+  const h = Math.max(1, Math.round(H * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(img, 0, 0, w, h);
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, w, h).data;
+  } catch {
+    return null;
+  }
+
+  // 배경색 추정: 네 변(테두리) 픽셀 평균
+  let br = 0, bg = 0, bb = 0, n = 0;
+  const add = (x: number, y: number) => {
+    const i = (y * w + x) * 4;
+    br += data[i]; bg += data[i + 1]; bb += data[i + 2]; n += 1;
+  };
+  for (let x = 0; x < w; x++) { add(x, 0); add(x, h - 1); }
+  for (let y = 0; y < h; y++) { add(0, y); add(w - 1, y); }
+  br /= n; bg /= n; bb /= n;
+
+  // 배경과의 색 거리로 전경(명함) 마스크 → 행·열별 전경 픽셀 수
+  const TH = 42;
+  const fgRow = new Array(h).fill(0);
+  const fgCol = new Array(w).fill(0);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const dr = data[i] - br, dg = data[i + 1] - bg, db = data[i + 2] - bb;
+      if (dr * dr + dg * dg + db * db > TH * TH) { fgRow[y] += 1; fgCol[x] += 1; }
+    }
+  }
+  const rowMin = Math.max(2, Math.round(w * 0.06));
+  const colMin = Math.max(2, Math.round(h * 0.06));
+  let y0 = 0; while (y0 < h && fgRow[y0] < rowMin) y0++;
+  let y1 = h - 1; while (y1 > y0 && fgRow[y1] < rowMin) y1--;
+  let x0 = 0; while (x0 < w && fgCol[x0] < colMin) x0++;
+  let x1 = w - 1; while (x1 > x0 && fgCol[x1] < colMin) x1--;
+  if (x1 <= x0 || y1 <= y0) return null;
+
+  const padX = w * 0.012, padY = h * 0.012;
+  const nx0 = Math.max(0, (x0 - padX) / w);
+  const ny0 = Math.max(0, (y0 - padY) / h);
+  const nx1 = Math.min(1, (x1 + padX) / w);
+  const ny1 = Math.min(1, (y1 + padY) / h);
+  const aw = nx1 - nx0, ah = ny1 - ny0;
+  if (aw < 0.12 || ah < 0.12) return null; // 너무 작음 → 오검출
+  if (aw > 0.985 && ah > 0.985) return null; // 사실상 전체 → 의미 없음
+  return [nx0, ny0, nx1, ny1];
+}
+
 export function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(

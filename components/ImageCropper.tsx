@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactCrop, { type Crop } from "react-image-crop";
-import { applyDocFilter, canvasToJpeg, rotate90 } from "@/lib/client-image";
+import { applyDocFilter, autoDetectCardBBox, canvasToJpeg, rotate90 } from "@/lib/client-image";
 
 // AI 가 감지한 명함 영역 [x0,y0,x1,y1] (0~1). 도착하면 크롭 박스를 자동으로 맞춤.
 export interface SuggestedBox {
@@ -46,9 +46,47 @@ export default function ImageCropper({
   });
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<FilterMode>("none");
+  const [autoMsg, setAutoMsg] = useState("");
   const touchedRef = useRef(false); // 사용자가 박스를 만졌는지
+  const autoTriedRef = useRef(false); // 로드 직후 자동 감지 1회만
 
   const filterCss = FILTERS.find((f) => f.id === filter)?.css ?? "none";
+
+  function applyBox(box: [number, number, number, number], markTouched: boolean) {
+    const [x0, y0, x1, y1] = box;
+    setCrop({
+      unit: "%",
+      x: x0 * 100,
+      y: y0 * 100,
+      width: Math.max(5, (x1 - x0) * 100),
+      height: Math.max(5, (y1 - y0) * 100),
+    });
+    if (markTouched) touchedRef.current = true;
+  }
+
+  // 배경 대비로 카드 영역 자동 감지 → 박스 스냅
+  function runAutoDetect() {
+    const img = imgRef.current;
+    if (!img) return;
+    const box = autoDetectCardBBox(img);
+    if (box) {
+      applyBox(box, true);
+      setAutoMsg("");
+    } else {
+      setAutoMsg("자동 감지가 애매해요 — 모서리를 손으로 맞춰주세요.");
+      setTimeout(() => setAutoMsg(""), 2500);
+    }
+  }
+
+  // 이미지 로드 시: AI 제안 박스가 없으면(뒷면·일괄 등) 자동 감지 1회 시도
+  function handleImgLoad() {
+    if (autoTriedRef.current || suggested || touchedRef.current) return;
+    autoTriedRef.current = true;
+    const img = imgRef.current;
+    if (!img) return;
+    const box = autoDetectCardBBox(img);
+    if (box) applyBox(box, false);
+  }
 
   async function rotate() {
     setBusy(true);
@@ -115,19 +153,30 @@ export default function ImageCropper({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
-      <div className="flex items-center justify-between p-4 text-white">
-        <span className="text-sm font-medium">
+      <div className="flex items-center justify-between gap-2 p-4 text-white">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {suggested ? "명함 영역 자동 감지됨 · 필요하면 조절" : "명함 영역을 맞추세요"}
         </span>
         <button
           type="button"
+          onClick={runAutoDetect}
+          disabled={busy}
+          className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
+        >
+          ✨ 자동 맞춤
+        </button>
+        <button
+          type="button"
           onClick={rotate}
           disabled={busy}
-          className="rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
+          className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
         >
           ↻ 회전
         </button>
       </div>
+      {autoMsg && (
+        <div className="px-4 pb-1 text-center text-xs text-amber-300">{autoMsg}</div>
+      )}
 
       <div className="flex flex-1 items-center justify-center overflow-hidden p-2">
         <ReactCrop
@@ -143,6 +192,7 @@ export default function ImageCropper({
             ref={imgRef}
             src={displaySrc}
             alt="크롭 대상"
+            onLoad={handleImgLoad}
             className="max-h-[70vh] w-auto max-w-full"
             style={{ filter: filterCss }}
           />
