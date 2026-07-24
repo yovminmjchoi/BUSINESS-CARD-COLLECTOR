@@ -110,11 +110,11 @@ export default function CompanyGroupManager({
             placeholder="묶음 이름"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
           />
-          <input
-            type="text"
+          <textarea
+            rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="메모"
+            placeholder="회사 소개"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
           />
           <input

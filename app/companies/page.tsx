@@ -8,6 +8,7 @@ import CompanyGroupManager, {
   type CompanyGroupSummary,
   type CompanyOption,
 } from "@/components/CompanyGroupManager";
+import CompanyGroupEditor from "@/components/CompanyGroupEditor";
 import TabBar from "@/components/TabBar";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +96,51 @@ export default async function CompaniesPage({
     }
 
     const cards = toCards(rows);
+
+    const { data: allCompanyData } = await supabase
+      .from("cards")
+      .select("company_normalized,company_ko,company_en");
+    const allCompanies = new Map<string, { name: string; count: number }>();
+    for (const row of (allCompanyData ?? []) as CompanyRow[]) {
+      const key = row.company_normalized ?? NONE;
+      if (key === NONE) continue;
+      const existing = allCompanies.get(key);
+      const name = displayCompany(row);
+      if (existing) {
+        existing.count += 1;
+        if (existing.name === "회사 미상" && name !== "회사 미상") existing.name = name;
+      } else {
+        allCompanies.set(key, { name, count: 1 });
+      }
+    }
+
+    const { data: allGroupData } = await supabase
+      .from("company_groups")
+      .select("id,name,company_group_members(company_normalized)")
+      .order("name");
+    const memberLookup = new Map<string, { groupId: string; groupName: string }>();
+    for (const g of (allGroupData ?? []) as unknown as {
+      id: string;
+      name: string;
+      company_group_members: { company_normalized: string }[] | null;
+    }[]) {
+      for (const member of g.company_group_members ?? []) {
+        memberLookup.set(member.company_normalized, { groupId: g.id, groupName: g.name });
+      }
+    }
+    const companyOptions: CompanyOption[] = [...allCompanies.entries()]
+      .map(([key, value]) => {
+        const linked = memberLookup.get(key);
+        return {
+          key,
+          name: value.name,
+          count: value.count,
+          groupId: linked?.groupId ?? null,
+          groupName: linked?.groupName ?? null,
+        };
+      })
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ko"));
+
     const thumbMap = new Map<string, string>();
     const paths = cards
       .map((c) => c.image_front_path)
@@ -125,6 +171,17 @@ export default async function CompaniesPage({
             </p>
           )}
         </div>
+        {group && (
+          <CompanyGroupEditor
+            group={{
+              id: group.id,
+              name: group.name,
+              note: group.note,
+              memberKeys: members.map((m) => m.company_normalized),
+            }}
+            companies={companyOptions}
+          />
+        )}
         {cards.length === 0 ? (
           <p className="p-12 text-center text-sm text-gray-400">
             이 묶음에 표시할 명함이 없습니다.
