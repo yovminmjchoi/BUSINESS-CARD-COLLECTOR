@@ -15,9 +15,12 @@ export interface SigFields {
   address: string;
 }
 
+export type MailApp = "default" | "outlook";
+
 export interface MyProfile {
   signature: string; // 최종 서명(그대로 메일에 삽입) — 진짜 소스
   fields: SigFields; // 아웃룩 형식 생성용 구조화 입력(편의)
+  mailApp: MailApp; // 메일 보내기 방식: 기본 메일 앱(mailto) / Outlook 웹
 }
 
 const KEY = "myProfile";
@@ -25,20 +28,21 @@ const EMPTY_FIELDS: SigFields = {
   nameEn: "", nameKo: "", title: "", company: "", tagline: "",
   mobile: "", officePhone: "", email: "", website: "", address: "",
 };
-const EMPTY: MyProfile = { signature: "", fields: { ...EMPTY_FIELDS } };
+const EMPTY: MyProfile = { signature: "", fields: { ...EMPTY_FIELDS }, mailApp: "default" };
 
 export function loadProfile(): MyProfile {
-  if (typeof window === "undefined") return { signature: "", fields: { ...EMPTY_FIELDS } };
+  if (typeof window === "undefined") return { ...EMPTY, fields: { ...EMPTY_FIELDS } };
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (!raw) return { signature: "", fields: { ...EMPTY_FIELDS } };
+    if (!raw) return { ...EMPTY, fields: { ...EMPTY_FIELDS } };
     const parsed = JSON.parse(raw) as Partial<MyProfile>;
     return {
       signature: typeof parsed.signature === "string" ? parsed.signature : "",
       fields: { ...EMPTY_FIELDS, ...(parsed.fields ?? {}) },
+      mailApp: parsed.mailApp === "outlook" ? "outlook" : "default",
     };
   } catch {
-    return { signature: "", fields: { ...EMPTY_FIELDS } };
+    return { ...EMPTY, fields: { ...EMPTY_FIELDS } };
   }
 }
 
@@ -80,18 +84,34 @@ export function buildOutlookSignature(f: SigFields): string {
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-// 폰 메일 앱을 여는 mailto 링크. 받는사람 = 상대 이메일, 본문 = 빈 줄 + 내 서명(그대로).
-export function buildMailto(
+function composeBody(profile: MyProfile): string {
+  const sig = profile.signature.trim();
+  return sig ? `\n\n${sig}` : "";
+}
+
+// 메일 작성 링크. 방식(mailApp)에 따라:
+//  - default: mailto (폰 기본 메일 앱, 보낸사람=기본 계정)
+//  - outlook: Outlook 웹 컴포즈 딥링크 (로그인된 회사 Office365 계정으로 발신)
+// external=true 면 새 탭(https)으로 열어야 함.
+export function buildComposeUrl(
   toEmail: string,
   profile: MyProfile,
   subject = "",
-): string {
+): { href: string; external: boolean } {
   const to = toEmail.trim();
-  const sig = profile.signature.trim();
-  const body = sig ? `\n\n${sig}` : "";
-  const params: string[] = [];
-  if (subject) params.push("subject=" + encodeURIComponent(subject));
-  if (body) params.push("body=" + encodeURIComponent(body));
-  const qs = params.length ? "?" + params.join("&") : "";
-  return `mailto:${to}${qs}`;
+  const body = composeBody(profile);
+  const q: string[] = [];
+  if (profile.mailApp === "outlook") {
+    q.push("to=" + encodeURIComponent(to));
+    if (subject) q.push("subject=" + encodeURIComponent(subject));
+    if (body) q.push("body=" + encodeURIComponent(body));
+    return {
+      href: `https://outlook.office.com/mail/deeplink/compose?${q.join("&")}`,
+      external: true,
+    };
+  }
+  if (subject) q.push("subject=" + encodeURIComponent(subject));
+  if (body) q.push("body=" + encodeURIComponent(body));
+  const qs = q.length ? "?" + q.join("&") : "";
+  return { href: `mailto:${to}${qs}`, external: false };
 }

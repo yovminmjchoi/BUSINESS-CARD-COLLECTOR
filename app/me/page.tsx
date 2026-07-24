@@ -33,7 +33,7 @@ const EMPTY_FIELDS: SigFields = {
 
 export default function MyProfilePage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<MyProfile>({ signature: "", fields: EMPTY_FIELDS });
+  const [profile, setProfile] = useState<MyProfile>({ signature: "", fields: EMPTY_FIELDS, mailApp: "default" });
   const [saved, setSaved] = useState(false);
   const [showFields, setShowFields] = useState(true);
 
@@ -48,6 +48,11 @@ export default function MyProfilePage() {
 
   function setSignature(value: string) {
     setProfile((p) => ({ ...p, signature: value }));
+    setSaved(false);
+  }
+
+  function setMailApp(v: "default" | "outlook") {
+    setProfile((p) => ({ ...p, mailApp: v }));
     setSaved(false);
   }
 
@@ -74,6 +79,36 @@ export default function MyProfilePage() {
       </div>
 
       <div className="flex flex-col gap-3 p-4">
+        {/* 메일 보내기 방식 */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-gray-500">메일 보내기 방식</span>
+          <div className="flex gap-2">
+            {([
+              { v: "default", label: "기본 메일 앱" },
+              { v: "outlook", label: "Outlook (회사 메일)" },
+            ] as const).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setMailApp(o.v)}
+                className={
+                  "flex-1 rounded-lg border px-3 py-2 text-sm " +
+                  (profile.mailApp === o.v
+                    ? "border-blue-600 bg-blue-50 font-medium text-blue-700"
+                    : "border-gray-300 text-gray-600")
+                }
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400">
+            {profile.mailApp === "outlook"
+              ? "Outlook 웹으로 열려요. 회사 Office365에 로그인돼 있으면 회사 주소로 발송됩니다."
+              : "폰 기본 메일 앱으로 열려요. 보낸사람은 기본 계정이에요."}
+          </p>
+        </div>
+
         {/* 빠른 입력 → 아웃룩 형식 생성 */}
         <div className="rounded-lg border border-gray-200">
           <button

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
 import ImageCropper from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
-import { loadProfile, buildMailto, hasSignature, type MyProfile } from "@/lib/profile";
+import { loadProfile, buildComposeUrl, hasSignature, type MyProfile } from "@/lib/profile";
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "family_name_ko", label: "성 (한글)" },
@@ -276,14 +276,18 @@ export default function CardDetail({
       {(() => {
         const emailAddr = (form.email || (card.email as string | null) || "").trim();
         if (!emailAddr) return null;
-        const href = profile ? buildMailto(emailAddr, profile) : `mailto:${emailAddr}`;
+        const { href, external } = profile
+          ? buildComposeUrl(emailAddr, profile)
+          : { href: `mailto:${emailAddr}`, external: false };
         return (
           <div className="flex flex-col gap-1">
             <a
               href={href}
+              target={external ? "_blank" : undefined}
+              rel={external ? "noopener noreferrer" : undefined}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-3 text-base font-medium text-white"
             >
-              ✉️ 메일 보내기
+              ✉️ 메일 보내기{profile?.mailApp === "outlook" ? " (Outlook)" : ""}
             </a>
             {profile && !hasSignature(profile) && (
               <Link href="/me" className="text-center text-xs text-gray-400 underline">
