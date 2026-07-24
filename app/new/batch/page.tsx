@@ -115,7 +115,6 @@ export default function BatchNewPage() {
   const backScanImgRef = useRef<HTMLImageElement | null>(null);
   const backInputRef = useRef<HTMLInputElement | null>(null);
   const backTargetRef = useRef<number | null>(null);
-  const backCropSrcImgRef = useRef<HTMLImageElement | null>(null); // 개별 뒷면 추가 시 원본(전체) 사진
   const itemsRef = useRef<Item[]>([]);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
@@ -321,10 +320,7 @@ export default function BatchNewPage() {
     if (i === null) return;
     setError("");
     const small = await downscale(file);
-    const url = URL.createObjectURL(small);
-    // 재크롭 시 전체 사진을 다시 볼 수 있도록 원본 이미지 보관
-    backCropSrcImgRef.current = await loadImage(url);
-    setBackCrop({ idx: i, src: url });
+    setBackCrop({ idx: i, src: URL.createObjectURL(small) });
   }
 
   function closeBackCrop() {
@@ -336,8 +332,6 @@ export default function BatchNewPage() {
   async function finishBack(blob: Blob) {
     if (!backCrop) return;
     const i = backCrop.idx;
-    const srcImg = backCropSrcImgRef.current;
-    backCropSrcImgRef.current = null;
     closeBackCrop();
     setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: true } : x)));
     try {
@@ -357,6 +351,7 @@ export default function BatchNewPage() {
           const { merged, filled } = backEx
             ? mergeEmpty(x.extraction, backEx)
             : { merged: x.extraction, filled: 0 };
+          // 개별 뒷면은 방금 사용자가 크롭한 그 카드 이미지 → 재크롭은 그 이미지로.
           return {
             ...x,
             extraction: merged,
@@ -364,9 +359,6 @@ export default function BatchNewPage() {
             backUrl: bUrl,
             backBusy: false,
             backFilled: filled,
-            // 원본 전체 사진 보관 → 재크롭 시 전체를 다시 볼 수 있음
-            backSrcImg: srcImg ?? undefined,
-            backBbox: srcImg ? [0, 0, 1, 1] : undefined,
           };
         }),
       );
@@ -385,8 +377,9 @@ export default function BatchNewPage() {
       const [x0, y0, x1, y1] = it.backBbox;
       const cw = x1 - x0;
       const ch = y1 - y0;
-      const mx = Math.min(0.25, cw * 0.25);
-      const my = Math.min(0.45, ch * 0.9);
+      // 그 명함에 집중: 작은 여백만(옆 명함 안 보이게). 살짝 잘렸으면 넓힐 정도.
+      const mx = cw * 0.18;
+      const my = ch * 0.18;
       const rx0 = Math.max(0, x0 - mx);
       const ry0 = Math.max(0, y0 - my);
       const rx1 = Math.min(1, x1 + mx);
