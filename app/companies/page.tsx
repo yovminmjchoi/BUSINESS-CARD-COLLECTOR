@@ -9,6 +9,7 @@ import CompanyGroupManager, {
   type CompanyOption,
 } from "@/components/CompanyGroupManager";
 import CompanyGroupEditor from "@/components/CompanyGroupEditor";
+import CompanySearchBar from "@/components/CompanySearchBar";
 import TabBar from "@/components/TabBar";
 
 export const dynamic = "force-dynamic";
@@ -61,14 +62,36 @@ function displayCompany(row: CompanyRow): string {
   return row.company_ko || row.company_en || "회사 미상";
 }
 
+function matchesSearch(values: (string | null | undefined)[], term: string): boolean {
+  if (!term) return true;
+  return values.some((value) => (value ?? "").toLowerCase().includes(term));
+}
+
+function companiesHref(q: string, sort: string): string {
+  const p = new URLSearchParams();
+  if (q) p.set("q", q);
+  if (sort) p.set("s", sort);
+  const qs = p.toString();
+  return qs ? `/companies?${qs}` : "/companies";
+}
+
+function companyDetailHref(key: string, q: string, sort: string): string {
+  const p = new URLSearchParams({ c: key });
+  if (q) p.set("q", q);
+  if (sort) p.set("s", sort);
+  return `/companies?${p.toString()}`;
+}
+
 export default async function CompaniesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ c?: string; g?: string; s?: string }>;
+  searchParams: Promise<{ c?: string; g?: string; q?: string; s?: string }>;
 }) {
   const sp = await searchParams;
   const selected = sp.c;
   const selectedGroup = sp.g;
+  const searchQuery = (sp.q ?? "").trim();
+  const searchTerm = searchQuery.toLowerCase();
   const sortBy = sp.s ?? ""; // "" 많은순 / "name" 가나다 / "name_desc" 역순
   const supabase = await createClient();
 
@@ -158,7 +181,7 @@ export default async function CompaniesPage({
       <main className="mx-auto min-h-screen max-w-md pb-24">
         <div className="sticky top-0 z-10 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
           <div className="flex items-center gap-3">
-            <Link href="/companies" className="text-sm text-gray-500">
+            <Link href={companiesHref(searchQuery, sortBy)} className="text-sm text-gray-500">
               ← 회사
             </Link>
             <h1 className="truncate text-lg font-bold">
@@ -241,7 +264,7 @@ export default async function CompaniesPage({
     return (
       <main className="mx-auto min-h-screen max-w-md pb-24">
         <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
-          <Link href="/companies" className="text-sm text-gray-500">
+          <Link href={companiesHref(searchQuery, sortBy)} className="text-sm text-gray-500">
             ← 회사
           </Link>
           <h1 className="truncate text-lg font-bold">
@@ -337,6 +360,15 @@ export default async function CompaniesPage({
     });
 
   const standaloneList = list.filter((company) => company.key === NONE || !memberLookup.has(company.key));
+  const visibleGroups = searchTerm
+    ? groups.filter((group) =>
+        matchesSearch([group.name, group.note, ...group.memberNames], searchTerm),
+      )
+    : groups;
+  const visibleStandaloneList = searchTerm
+    ? standaloneList.filter((company) => matchesSearch([company.name], searchTerm))
+    : standaloneList;
+  const visibleCount = visibleGroups.length + visibleStandaloneList.length;
 
   const SORTS = [
     { v: "", label: "많은순" },
@@ -346,41 +378,51 @@ export default async function CompaniesPage({
 
   return (
     <main className="mx-auto min-h-screen max-w-md pb-24">
-      <div className="flex items-center justify-between gap-2 border-b border-gray-100 p-4">
-        <h1 className="text-lg font-bold">
-          회사 {list.length > 0 && `(${list.length})`}
-        </h1>
-        <div className="flex gap-1.5">
-          {SORTS.map((s) => {
-            const active = sortBy === s.v;
-            return (
-              <Link
-                key={s.v}
-                href={s.v ? `/companies?s=${s.v}` : "/companies"}
-                className={
-                  "rounded-full px-2.5 py-1 text-xs " +
-                  (active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600")
-                }
-              >
-                {s.label}
-              </Link>
-            );
-          })}
+      <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-gray-100 bg-white/95 p-4 backdrop-blur">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-lg font-bold">
+            회사 {list.length > 0 && `(${list.length})`}
+          </h1>
+          <div className="flex gap-1.5">
+            {SORTS.map((s) => {
+              const active = sortBy === s.v;
+              return (
+                <Link
+                  key={s.v}
+                  href={companiesHref(searchQuery, s.v)}
+                  className={
+                    "rounded-full px-2.5 py-1 text-xs " +
+                    (active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600")
+                  }
+                >
+                  {s.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
+        <CompanySearchBar q={searchQuery} sort={sortBy} />
+        {searchQuery && (
+          <p className="text-xs text-gray-400">검색 결과 {visibleCount}개</p>
+        )}
       </div>
 
-      <CompanyGroupManager companies={companyOptions} groups={groups} />
+      <CompanyGroupManager
+        companies={companyOptions}
+        groups={visibleGroups}
+        searchActive={Boolean(searchTerm)}
+      />
 
-      {standaloneList.length === 0 ? (
+      {visibleGroups.length === 0 && visibleStandaloneList.length === 0 ? (
         <p className="p-12 text-center text-sm text-gray-400">
-          아직 저장된 명함이 없습니다.
+          {searchTerm ? "검색 결과가 없습니다." : "아직 저장된 명함이 없습니다."}
         </p>
       ) : (
         <ul>
-          {standaloneList.map((g) => (
+          {visibleStandaloneList.map((g) => (
             <li key={g.key}>
               <Link
-                href={`/companies?c=${encodeURIComponent(g.key)}`}
+                href={companyDetailHref(g.key, searchQuery, sortBy)}
                 className="flex items-center justify-between border-b border-gray-100 px-4 py-3 active:bg-gray-50"
               >
                 <span className="truncate font-medium text-gray-900">

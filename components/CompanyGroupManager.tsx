@@ -23,9 +23,11 @@ export interface CompanyGroupSummary {
 export default function CompanyGroupManager({
   companies,
   groups,
+  searchActive = false,
 }: {
   companies: CompanyOption[];
   groups: CompanyGroupSummary[];
+  searchActive?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -89,7 +91,11 @@ export default function CompanyGroupManager({
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-gray-900">회사 묶음</h2>
           <p className="mt-0.5 text-xs text-gray-400">
-            {groups.length > 0 ? `${groups.length}개 묶음 · 누르면 같이 보기` : "여러 회사를 한 덩어리로 보기"}
+            {groups.length > 0
+              ? `${groups.length}개 묶음 · 누르면 같이 보기`
+              : searchActive
+                ? "검색된 묶음 없음"
+                : "여러 회사를 한 덩어리로 보기"}
           </p>
         </div>
         <button
