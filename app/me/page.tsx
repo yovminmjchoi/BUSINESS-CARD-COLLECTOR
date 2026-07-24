@@ -8,6 +8,7 @@ import {
   loadProfile,
   saveProfile,
   buildOutlookSignature,
+  type MailApp,
   type MyProfile,
   type SigFields,
 } from "@/lib/profile";
@@ -51,7 +52,7 @@ export default function MyProfilePage() {
     setSaved(false);
   }
 
-  function setMailApp(v: "default" | "outlook") {
+  function setMailApp(v: MailApp) {
     setProfile((p) => ({ ...p, mailApp: v }));
     setSaved(false);
   }
@@ -84,8 +85,9 @@ export default function MyProfilePage() {
           <span className="text-xs font-medium text-gray-500">메일 보내기 방식</span>
           <div className="flex gap-2">
             {([
-              { v: "default", label: "기본 메일 앱" },
-              { v: "outlook", label: "Outlook (회사 메일)" },
+              { v: "default", label: "기본 메일" },
+              { v: "outlook", label: "Outlook" },
+              { v: "gmail", label: "Gmail" },
             ] as const).map((o) => (
               <button
                 key={o.v}
@@ -104,8 +106,10 @@ export default function MyProfilePage() {
           </div>
           <p className="text-xs text-gray-400">
             {profile.mailApp === "outlook"
-              ? "Outlook 웹으로 열려요. 회사 보안에서 막히면 명함 상세의 초안 복사를 쓰세요."
-              : "폰 기본 메일 앱으로 열려요. 보낸사람은 기본 계정이에요."}
+              ? "Outlook 작성창으로 열어요. 회사 보안 정책에 따라 로그인이 필요할 수 있어요."
+              : profile.mailApp === "gmail"
+                ? "Gmail 작성창으로 열어요. Google 계정 로그인이 필요할 수 있어요."
+                : "폰이나 브라우저의 기본 메일 앱으로 열어요."}
           </p>
         </div>
 

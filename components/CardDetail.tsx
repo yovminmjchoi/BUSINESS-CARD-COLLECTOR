@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
 import ImageCropper from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
-import { loadProfile, buildComposeUrl, hasSignature, type MyProfile } from "@/lib/profile";
+import { loadProfile, buildComposeLinks, hasSignature, type MyProfile } from "@/lib/profile";
+
+type ComposeLink = ReturnType<typeof buildComposeLinks>[number];
 
 const FIELDS: { key: string; label: string }[] = [
   { key: "family_name_ko", label: "성 (한글)" },
@@ -86,7 +88,6 @@ export default function CardDetail({
   const [settingPrimary, setSettingPrimary] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
   const [profile, setProfile] = useState<MyProfile | null>(null);
-  const [copyingMail, setCopyingMail] = useState(false);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -257,30 +258,18 @@ export default function CardDetail({
     }
   }
 
-  function buildManualMailDraft(toEmail: string): string {
-    const signature = profile?.signature.trim() ?? "";
-    return [
-      `받는 사람: ${toEmail}`,
-      "제목:",
-      "",
-      "본문:",
-      "",
-      signature,
-    ].join("\n").trimEnd();
-  }
-
-  async function copyMailDraft(toEmail: string) {
-    setCopyingMail(true);
-    setMessage("");
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-      await navigator.clipboard.writeText(buildManualMailDraft(toEmail));
-      setMessage("메일 초안을 복사했습니다. Outlook에서 새 메일을 열고 붙여넣으세요.");
-    } catch {
-      setMessage("복사가 막혔어요. 이메일 주소와 서명을 직접 복사해 사용하세요.");
-    } finally {
-      setCopyingMail(false);
+  function openCompose(link: ComposeLink) {
+    if (!link.fallbackHref) {
+      window.location.href = link.href;
+      return;
     }
+    const startedAt = Date.now();
+    window.location.href = link.href;
+    window.setTimeout(() => {
+      if (document.visibilityState === "visible" && Date.now() - startedAt < 1800) {
+        window.location.href = link.fallbackHref!;
+      }
+    }, 900);
   }
 
   return (
@@ -299,38 +288,31 @@ export default function CardDetail({
         </select>
       </header>
 
-      {/* 메일 보내기: 링크가 막히는 회사 Outlook을 위해 수동 복사도 제공 */}
+      {/* 메일 보내기: 사용자가 원하는 앱을 바로 열 수 있게 선택지를 제공 */}
       {(() => {
         const emailAddr = (form.email || (card.email as string | null) || "").trim();
         if (!emailAddr) return null;
-        const { href, external } = profile
-          ? buildComposeUrl(emailAddr, profile)
-          : { href: `mailto:${emailAddr}`, external: false };
+        const links = buildComposeLinks(emailAddr, profile);
         return (
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-2 gap-2">
-              <a
-                href={href}
-                target={external ? "_blank" : undefined}
-                rel={external ? "noopener noreferrer" : undefined}
-                className="flex w-full items-center justify-center rounded-lg bg-gray-900 px-3 py-3 text-sm font-medium text-white"
-              >
-                메일 열기
-              </a>
-              <button
-                type="button"
-                onClick={() => copyMailDraft(emailAddr)}
-                disabled={copyingMail}
-                className="flex w-full items-center justify-center rounded-lg border border-gray-300 bg-white px-3 py-3 text-sm font-medium text-gray-700 disabled:opacity-50"
-              >
-                {copyingMail ? "복사 중..." : "초안 복사"}
-              </button>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-gray-500">메일 보내기</span>
+            <div className="grid grid-cols-3 gap-2">
+              {links.map((link) => (
+                <button
+                  key={link.key}
+                  type="button"
+                  onClick={() => openCompose(link)}
+                  className={
+                    "flex min-h-11 w-full items-center justify-center rounded-lg px-2 py-2.5 text-center text-xs font-medium " +
+                    (link.selected
+                      ? "bg-gray-900 text-white"
+                      : "border border-gray-300 bg-white text-gray-700")
+                  }
+                >
+                  {link.label}
+                </button>
+              ))}
             </div>
-            {profile?.mailApp === "outlook" && (
-              <p className="text-center text-xs text-amber-600">
-                회사 Outlook이 막히면 초안 복사 후 Outlook 앱에서 붙여넣으세요.
-              </p>
-            )}
             {profile && !hasSignature(profile) && (
               <Link href="/me" className="text-center text-xs text-gray-400 underline">
                 내 서명 설정 (설정 › 내 정보)
