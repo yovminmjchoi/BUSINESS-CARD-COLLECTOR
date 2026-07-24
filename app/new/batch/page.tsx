@@ -19,6 +19,7 @@ interface Item {
   backUrl?: string;
   backBusy?: boolean; // 뒷면 인식 중
   backFilled?: number; // 뒷면으로 채운 빈 칸 수
+  dup?: { name: string; company: string; reasons: string[]; strong: boolean } | null; // 중복 후보
 }
 
 function displayName(e: CardExtraction): string {
@@ -114,6 +115,42 @@ export default function BatchNewPage() {
             if (Array.isArray(d.tagIds) && d.tagIds.length > 0) {
               setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, tagIds: d.tagIds } : x)));
             }
+          })
+          .catch(() => {});
+      });
+
+      // 각 명함 중복 감지 (이메일/전화/이름·회사). 강한 일치(이메일·전화)면 기본 제외.
+      built.forEach((it, i) => {
+        const e = it.extraction;
+        fetch("/api/duplicates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: e.email,
+            mobile: e.mobile,
+            name: e.name_ko || e.name_en,
+            companyKo: e.company_ko,
+            companyEn: e.company_en,
+          }),
+        })
+          .then((r) => r.json())
+          .then((d) => {
+            const c = d.candidates?.[0];
+            if (!c) return;
+            const strong = (c.reasons ?? []).some(
+              (r: string) => r.includes("이메일") || r.includes("전화"),
+            );
+            setItems((arr) =>
+              arr.map((x, idx) =>
+                idx === i
+                  ? {
+                      ...x,
+                      dup: { name: c.name, company: c.company, reasons: c.reasons ?? [], strong },
+                      include: strong ? false : x.include, // 확실한 중복은 기본 제외
+                    }
+                  : x,
+              ),
+            );
           })
           .catch(() => {});
       });
@@ -402,6 +439,13 @@ export default function BatchNewPage() {
                       <div className="truncate text-gray-500">{[company, title].filter(Boolean).join(" · ")}</div>
                     )}
                     {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
+                    {it.dup && (
+                      <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
+                        ⚠ 이미 있는 명함일 수 있어요: <span className="font-medium">{it.dup.name}</span>
+                        {it.dup.company ? ` (${it.dup.company})` : ""} · {it.dup.reasons.join(", ")}
+                        {it.dup.strong ? " — 기본 제외됨" : ""}
+                      </div>
+                    )}
                     <div className="mt-1 flex flex-wrap items-center gap-3">
                       <button type="button" onClick={() => openCrop(i)} className="text-xs text-blue-600 underline">
                         사진 크롭
