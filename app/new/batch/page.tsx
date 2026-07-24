@@ -377,22 +377,17 @@ export default function BatchNewPage() {
       const [x0, y0, x1, y1] = it.backBbox;
       const cw = x1 - x0;
       const ch = y1 - y0;
-      // 그 명함에 집중: 작은 여백만(옆 명함 안 보이게). 살짝 잘렸으면 넓힐 정도.
-      const mx = cw * 0.18;
-      const my = ch * 0.18;
+      // 여백 넉넉·대칭 → 카드가 잘리지 않게 (앞면과 동일)
+      const mx = Math.min(0.3, Math.max(0.15, cw * 0.6));
+      const my = Math.min(0.3, Math.max(0.15, ch * 0.6));
       const rx0 = Math.max(0, x0 - mx);
       const ry0 = Math.max(0, y0 - my);
       const rx1 = Math.min(1, x1 + mx);
       const ry1 = Math.min(1, y1 + my);
       const regionBlob = await cropBboxToBlob(it.backSrcImg, [rx0, ry0, rx1, ry1]);
       const src = URL.createObjectURL(regionBlob);
-      const rw = rx1 - rx0;
-      const rh = ry1 - ry0;
-      setBackEditCrop({
-        idx: i,
-        src,
-        suggested: { x0: (x0 - rx0) / rw, y0: (y0 - ry0) / rh, x1: (x1 - rx0) / rw, y1: (y1 - ry0) / rh },
-      });
+      // suggested=null → 크로퍼가 이 영역 안에서 실제 카드 경계를 자동 감지해 스냅
+      setBackEditCrop({ idx: i, src, suggested: null });
     } else {
       // 원본이 없으면(구버전 등) 잘린 이미지 그대로 재크롭
       setBackEditCrop({ idx: i, src: URL.createObjectURL(it.backBlob), suggested: null });
@@ -571,21 +566,17 @@ export default function BatchNewPage() {
     const [x0, y0, x1, y1] = bbox;
     const cw = x1 - x0;
     const ch = y1 - y0;
-    const mx = Math.min(0.25, cw * 0.25);
-    const my = Math.min(0.45, ch * 0.9);
+    // 여백 넉넉·대칭 → AI 영역이 실제 카드보다 작아도 잘리지 않게
+    const mx = Math.min(0.3, Math.max(0.15, cw * 0.6));
+    const my = Math.min(0.3, Math.max(0.15, ch * 0.6));
     const rx0 = Math.max(0, x0 - mx);
     const ry0 = Math.max(0, y0 - my);
     const rx1 = Math.min(1, x1 + mx);
     const ry1 = Math.min(1, y1 + my);
     const regionBlob = await cropBboxToBlob(img, [rx0, ry0, rx1, ry1]);
     const src = URL.createObjectURL(regionBlob);
-    const rw = rx1 - rx0;
-    const rh = ry1 - ry0;
-    setCrop({
-      idx: i,
-      src,
-      suggested: { x0: (x0 - rx0) / rw, y0: (y0 - ry0) / rh, x1: (x1 - rx0) / rw, y1: (y1 - ry0) / rh },
-    });
+    // suggested=null → 크로퍼가 이 영역 안에서 실제 카드 경계를 자동 감지해 스냅
+    setCrop({ idx: i, src, suggested: null });
   }
 
   function closeCrop() {
