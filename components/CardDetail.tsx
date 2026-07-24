@@ -88,6 +88,7 @@ export default function CardDetail({
   const [settingPrimary, setSettingPrimary] = useState(false);
   const [imgBusy, setImgBusy] = useState(false);
   const [profile, setProfile] = useState<MyProfile | null>(null);
+  const [showMailApps, setShowMailApps] = useState(false);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -259,10 +260,12 @@ export default function CardDetail({
   }
 
   function openCompose(link: ComposeLink) {
+    setShowMailApps(false);
     if (!link.fallbackHref) {
       window.location.href = link.href;
       return;
     }
+
     const startedAt = Date.now();
     window.location.href = link.href;
     window.setTimeout(() => {
@@ -288,35 +291,60 @@ export default function CardDetail({
         </select>
       </header>
 
-      {/* 메일 보내기: 사용자가 원하는 앱을 바로 열 수 있게 선택지를 제공 */}
+      {/* 메일 보내기: 버튼 하나만 보이고, 앱 선택은 누른 뒤에 한다. */}
       {(() => {
         const emailAddr = (form.email || (card.email as string | null) || "").trim();
         if (!emailAddr) return null;
         const links = buildComposeLinks(emailAddr, profile);
         return (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-gray-500">메일 보내기</span>
-            <div className="grid grid-cols-3 gap-2">
-              {links.map((link) => (
-                <button
-                  key={link.key}
-                  type="button"
-                  onClick={() => openCompose(link)}
-                  className={
-                    "flex min-h-11 w-full items-center justify-center rounded-lg px-2 py-2.5 text-center text-xs font-medium " +
-                    (link.selected
-                      ? "bg-gray-900 text-white"
-                      : "border border-gray-300 bg-white text-gray-700")
-                  }
-                >
-                  {link.label}
-                </button>
-              ))}
-            </div>
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              onClick={() => setShowMailApps(true)}
+              className="flex w-full items-center justify-center rounded-lg bg-gray-900 px-4 py-3 text-base font-medium text-white"
+            >
+              메일 보내기
+            </button>
             {profile && !hasSignature(profile) && (
               <Link href="/me" className="text-center text-xs text-gray-400 underline">
                 내 서명 설정 (설정 › 내 정보)
               </Link>
+            )}
+            {showMailApps && (
+              <div
+                className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 px-3 pb-3"
+                role="dialog"
+                aria-modal="true"
+                onClick={() => setShowMailApps(false)}
+              >
+                <div
+                  className="w-full max-w-md rounded-t-lg bg-white p-4 shadow-lg"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-gray-300" />
+                  <h2 className="text-lg font-bold text-gray-900">메일 작성 앱</h2>
+                  <div className="mt-4 flex flex-col gap-2">
+                    {links.map((link) => (
+                      <button
+                        key={link.key}
+                        type="button"
+                        onClick={() => openCompose(link)}
+                        className="flex w-full items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-left text-base font-medium text-gray-900"
+                      >
+                        <span>{link.label}</span>
+                        <span className="text-gray-400">›</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMailApps(false)}
+                    className="mt-3 w-full rounded-lg bg-gray-100 px-4 py-3 text-base font-medium text-gray-600"
+                  >
+                    취소
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         );

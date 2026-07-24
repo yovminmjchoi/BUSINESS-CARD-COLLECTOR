@@ -20,7 +20,7 @@ export type MailApp = "default" | "outlook" | "gmail";
 export interface MyProfile {
   signature: string; // 최종 서명(그대로 메일에 삽입) — 진짜 소스
   fields: SigFields; // 아웃룩 형식 생성용 구조화 입력(편의)
-  mailApp: MailApp; // 메일 보내기 기본 방식
+  mailApp: MailApp; // 예전 설정값 보존용. 지금은 상세 화면에서 보낼 때마다 앱을 고른다.
 }
 
 const KEY = "myProfile";
@@ -91,46 +91,13 @@ function composeBody(profile: MyProfile | null): string {
   return sig ? `\n\n${sig}` : "";
 }
 
-function composeUrlForApp(
+function buildMailtoUrl(
   toEmail: string,
   profile: MyProfile | null,
-  app: MailApp,
   subject = "",
-): { href: string; fallbackHref?: string } {
+): { href: string } {
   const to = toEmail.trim();
   const body = composeBody(profile);
-  if (app === "outlook") {
-    const appQ = ["to=" + encodeURIComponent(to)];
-    const webQ = ["to=" + encodeURIComponent(to)];
-    if (subject) {
-      appQ.push("subject=" + encodeURIComponent(subject));
-      webQ.push("subject=" + encodeURIComponent(subject));
-    }
-    if (body) {
-      appQ.push("body=" + encodeURIComponent(body));
-      webQ.push("body=" + encodeURIComponent(body));
-    }
-    return {
-      href: `ms-outlook://compose?${appQ.join("&")}`,
-      fallbackHref: `https://outlook.office.com/mail/deeplink/compose?${webQ.join("&")}`,
-    };
-  }
-  if (app === "gmail") {
-    const appQ = ["to=" + encodeURIComponent(to)];
-    const webQ = ["view=cm", "fs=1", "to=" + encodeURIComponent(to)];
-    if (subject) {
-      appQ.push("subject=" + encodeURIComponent(subject));
-      webQ.push("su=" + encodeURIComponent(subject));
-    }
-    if (body) {
-      appQ.push("body=" + encodeURIComponent(body));
-      webQ.push("body=" + encodeURIComponent(body));
-    }
-    return {
-      href: `googlegmail:///co?${appQ.join("&")}`,
-      fallbackHref: `https://mail.google.com/mail/?${webQ.join("&")}`,
-    };
-  }
   const q: string[] = [];
   if (subject) q.push("subject=" + encodeURIComponent(subject));
   if (body) q.push("body=" + encodeURIComponent(body));
@@ -138,29 +105,49 @@ function composeUrlForApp(
   return { href: `mailto:${to}${qs}` };
 }
 
-// 내 정보에서 고른 기본 메일 앱으로 작성 링크를 만든다.
+function composeUrlForApp(
+  toEmail: string,
+  profile: MyProfile | null,
+  app: MailApp,
+  subject = "",
+): { href: string; fallbackHref?: string } {
+  const mailto = buildMailtoUrl(toEmail, profile, subject);
+  if (app === "default") return mailto;
+
+  const to = toEmail.trim();
+  const body = composeBody(profile);
+  const q: string[] = ["to=" + encodeURIComponent(to)];
+  if (subject) q.push("subject=" + encodeURIComponent(subject));
+  if (body) q.push("body=" + encodeURIComponent(body));
+
+  return {
+    href: app === "gmail"
+      ? `googlegmail:///co?${q.join("&")}`
+      : `ms-outlook://compose?${q.join("&")}`,
+    fallbackHref: mailto.href,
+  };
+}
+
 export function buildComposeUrl(
   toEmail: string,
   profile: MyProfile | null,
   subject = "",
-): { href: string; fallbackHref?: string } {
-  return composeUrlForApp(toEmail, profile, profile?.mailApp ?? "default", subject);
+): { href: string } {
+  return buildMailtoUrl(toEmail, profile, subject);
 }
 
 export function buildComposeLinks(
   toEmail: string,
   profile: MyProfile | null,
   subject = "",
-): { key: MailApp; label: string; href: string; fallbackHref?: string; selected: boolean }[] {
+): { key: MailApp; label: string; href: string; fallbackHref?: string }[] {
   const apps: { key: MailApp; label: string }[] = [
+    { key: "gmail", label: "Gmail" },
     { key: "default", label: "기본 메일" },
     { key: "outlook", label: "Outlook" },
-    { key: "gmail", label: "Gmail" },
   ];
-  const selected = profile?.mailApp ?? "default";
   return apps.map((app) => ({
     ...app,
     ...composeUrlForApp(toEmail, profile, app.key, subject),
-    selected: app.key === selected,
   }));
 }

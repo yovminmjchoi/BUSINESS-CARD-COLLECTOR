@@ -8,7 +8,6 @@ import {
   loadProfile,
   saveProfile,
   buildOutlookSignature,
-  type MailApp,
   type MyProfile,
   type SigFields,
 } from "@/lib/profile";
@@ -52,11 +51,6 @@ export default function MyProfilePage() {
     setSaved(false);
   }
 
-  function setMailApp(v: MailApp) {
-    setProfile((p) => ({ ...p, mailApp: v }));
-    setSaved(false);
-  }
-
   function generate() {
     const sig = buildOutlookSignature(profile.fields);
     if (profile.signature.trim() && profile.signature.trim() !== sig && !confirm("아래 서명을 새로 생성한 내용으로 바꿀까요?")) return;
@@ -80,39 +74,6 @@ export default function MyProfilePage() {
       </div>
 
       <div className="flex flex-col gap-3 p-4">
-        {/* 메일 보내기 방식 */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-gray-500">메일 보내기 방식</span>
-          <div className="flex gap-2">
-            {([
-              { v: "default", label: "기본 메일" },
-              { v: "outlook", label: "Outlook" },
-              { v: "gmail", label: "Gmail" },
-            ] as const).map((o) => (
-              <button
-                key={o.v}
-                type="button"
-                onClick={() => setMailApp(o.v)}
-                className={
-                  "flex-1 rounded-lg border px-3 py-2 text-sm " +
-                  (profile.mailApp === o.v
-                    ? "border-blue-600 bg-blue-50 font-medium text-blue-700"
-                    : "border-gray-300 text-gray-600")
-                }
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-gray-400">
-            {profile.mailApp === "outlook"
-              ? "Outlook 작성창으로 열어요. 회사 보안 정책에 따라 로그인이 필요할 수 있어요."
-              : profile.mailApp === "gmail"
-                ? "Gmail 작성창으로 열어요. Google 계정 로그인이 필요할 수 있어요."
-                : "폰이나 브라우저의 기본 메일 앱으로 열어요."}
-          </p>
-        </div>
-
         {/* 빠른 입력 → 아웃룩 형식 생성 */}
         <div className="rounded-lg border border-gray-200">
           <button
