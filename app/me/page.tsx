@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import TabBar from "@/components/TabBar";
 import {
   loadProfile,
@@ -10,6 +11,7 @@ import {
   type MyProfile,
   type SigFields,
 } from "@/lib/profile";
+import { openAddressSearch } from "@/lib/postcode";
 
 const FIELD_DEFS: { key: keyof SigFields; label: string }[] = [
   { key: "nameEn", label: "이름 (영문)" },
@@ -30,6 +32,7 @@ const EMPTY_FIELDS: SigFields = {
 };
 
 export default function MyProfilePage() {
+  const router = useRouter();
   const [profile, setProfile] = useState<MyProfile>({ signature: "", fields: EMPTY_FIELDS });
   const [saved, setSaved] = useState(false);
   const [showFields, setShowFields] = useState(true);
@@ -57,7 +60,8 @@ export default function MyProfilePage() {
   function save() {
     saveProfile(profile);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    // 저장 후 설정으로 돌아가기
+    router.push("/settings");
   }
 
   return (
@@ -85,12 +89,30 @@ export default function MyProfilePage() {
               {FIELD_DEFS.map(({ key, label }) => (
                 <label key={key} className="flex flex-col gap-0.5">
                   <span className="text-[11px] font-medium text-gray-400">{label}</span>
-                  <input
-                    type="text"
-                    value={profile.fields[key]}
-                    onChange={(e) => setField(key, e.target.value)}
-                    className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
-                  />
+                  {key === "address" ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={profile.fields.address}
+                        onChange={(e) => setField("address", e.target.value)}
+                        className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => openAddressSearch((a) => setField("address", a))}
+                        className="flex-shrink-0 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-600"
+                      >
+                        주소 검색
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={profile.fields[key]}
+                      onChange={(e) => setField(key, e.target.value)}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                    />
+                  )}
                 </label>
               ))}
               <button
