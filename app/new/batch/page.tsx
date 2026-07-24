@@ -36,6 +36,7 @@ function backMatchScore(F: CardExtraction, B: CardExtraction): number {
   return s;
 }
 const MATCH_THRESHOLD = 60; // 전화/이메일(100) 또는 회사+이름유사 조합
+const WHOLE_IMAGE_EPSILON = 0.02;
 
 interface Item {
   extraction: CardExtraction;
@@ -53,6 +54,36 @@ interface Item {
   // 뒷면 재크롭 시 여백 포함해 다시 자를 수 있도록 원본 이미지·영역 보관
   backSrcImg?: HTMLImageElement;
   backBbox?: [number, number, number, number];
+}
+
+function isWholeImageBox(bbox: [number, number, number, number]): boolean {
+  const [x0, y0, x1, y1] = bbox;
+  return (
+    x0 <= WHOLE_IMAGE_EPSILON &&
+    y0 <= WHOLE_IMAGE_EPSILON &&
+    x1 >= 1 - WHOLE_IMAGE_EPSILON &&
+    y1 >= 1 - WHOLE_IMAGE_EPSILON
+  );
+}
+
+function expandCardBox(
+  bbox: [number, number, number, number],
+): [number, number, number, number] | null {
+  if (isWholeImageBox(bbox)) return null;
+  const [x0, y0, x1, y1] = bbox;
+  const cw = x1 - x0;
+  const ch = y1 - y0;
+  if (cw <= 0 || ch <= 0) return null;
+
+  // Keep enough room for clipped edges without expanding one card into the whole sheet.
+  const mx = Math.min(0.08, Math.max(0.025, cw * 0.18));
+  const my = Math.min(0.08, Math.max(0.025, ch * 0.18));
+  return [
+    Math.max(0, x0 - mx),
+    Math.max(0, y0 - my),
+    Math.min(1, x1 + mx),
+    Math.min(1, y1 + my),
+  ];
 }
 
 // 확인/수정 폼 필드 (성/이름 분리, 전체이름은 자동 합성)
@@ -373,23 +404,14 @@ export default function BatchNewPage() {
   async function openBackCrop(i: number) {
     const it = itemsRef.current[i];
     if (!it || !it.backBlob) return;
-    if (it.backSrcImg && it.backBbox) {
-      const [x0, y0, x1, y1] = it.backBbox;
-      const cw = x1 - x0;
-      const ch = y1 - y0;
-      // 여백 넉넉·대칭 → 카드가 잘리지 않게 (앞면과 동일)
-      const mx = Math.min(0.3, Math.max(0.15, cw * 0.6));
-      const my = Math.min(0.3, Math.max(0.15, ch * 0.6));
-      const rx0 = Math.max(0, x0 - mx);
-      const ry0 = Math.max(0, y0 - my);
-      const rx1 = Math.min(1, x1 + mx);
-      const ry1 = Math.min(1, y1 + my);
-      const regionBlob = await cropBboxToBlob(it.backSrcImg, [rx0, ry0, rx1, ry1]);
+    const expanded = it.backBbox ? expandCardBox(it.backBbox) : null;
+    if (it.backSrcImg && expanded) {
+      const regionBlob = await cropBboxToBlob(it.backSrcImg, expanded);
       const src = URL.createObjectURL(regionBlob);
       // suggested=null → 크로퍼가 이 영역 안에서 실제 카드 경계를 자동 감지해 스냅
       setBackEditCrop({ idx: i, src, suggested: null });
     } else {
-      // 원본이 없으면(구버전 등) 잘린 이미지 그대로 재크롭
+      // 원본 bbox 가 전체 이미지에 가까우면 이미 잘린 이미지 기준으로만 재크롭한다.
       setBackEditCrop({ idx: i, src: URL.createObjectURL(it.backBlob), suggested: null });
     }
   }
@@ -563,17 +585,7 @@ export default function BatchNewPage() {
     const img = scanImgRef.current;
     if (!img) return;
     const bbox = items[i].extraction.card_bbox ?? [0, 0, 1, 1];
-    const [x0, y0, x1, y1] = bbox;
-    const cw = x1 - x0;
-    const ch = y1 - y0;
-    // 여백 넉넉·대칭 → AI 영역이 실제 카드보다 작아도 잘리지 않게
-    const mx = Math.min(0.3, Math.max(0.15, cw * 0.6));
-    const my = Math.min(0.3, Math.max(0.15, ch * 0.6));
-    const rx0 = Math.max(0, x0 - mx);
-    const ry0 = Math.max(0, y0 - my);
-    const rx1 = Math.min(1, x1 + mx);
-    const ry1 = Math.min(1, y1 + my);
-    const regionBlob = await cropBboxToBlob(img, [rx0, ry0, rx1, ry1]);
+    const regionBlob = await cropBboxToBlob(img, expandCardBox(bbox) ?? [0, 0, 1, 1]);
     const src = URL.createObjectURL(regionBlob);
     // suggested=null → 크로퍼가 이 영역 안에서 실제 카드 경계를 자동 감지해 스냅
     setCrop({ idx: i, src, suggested: null });
