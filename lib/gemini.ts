@@ -112,7 +112,7 @@ export async function extractMultipleCards(
   const ai = getClient();
   const prompt =
     loadPrompt() +
-    `\n\n## 여러 명함 (중요)\n이 이미지에는 명함이 **여러 장** 들어 있을 수 있습니다. 각 명함을 개별로 인식해 아래 형태의 JSON 하나만 출력하세요:\n{"cards": [ <위 스키마의 객체>, <객체>, ... ]}\n- 각 객체의 \`card_bbox\`는 **그 명함**이 이미지에서 차지하는 영역(0~1)이어야 합니다.\n- 명함이 한 장뿐이면 cards 에 한 개만 넣습니다.\n- 명함이 아닌 로고/여백은 넣지 마세요.`;
+    `\n\n## 여러 명함 (중요)\n이 이미지에는 명함이 **여러 장** 들어 있을 수 있습니다. 각 명함을 개별로 인식해 아래 형태의 JSON 하나만 출력하세요:\n{"cards": [ <위 스키마의 객체>, <객체>, ... ]}\n\n### card_bbox 는 여기서 **필수** (매우 중요)\n- 위 스키마의 "명함이 대부분을 차지하면 null" 규칙은 **여기서는 무시**하세요. 여러 장이 있으므로 각 명함은 이미지의 일부만 차지합니다.\n- 각 객체의 \`card_bbox\`에 **그 명함 한 장이 차지하는 영역** [x_min, y_min, x_max, y_max](0~1)을 **반드시** 채우세요. **절대 null 로 두지 말고, 이미지 전체([0,0,1,1])로 두지도 마세요.**\n- 카드마다 bbox 값이 **서로 달라야** 합니다(각자 다른 위치). 사진이 기울어 있어도 그 명함을 감싸는 사각형을 추정해 넣으세요.\n- 예: 왼쪽 위 명함 [0.05,0.06,0.47,0.30], 오른쪽 위 [0.52,0.06,0.94,0.30] 처럼.\n- 명함이 한 장뿐이면 cards 에 한 개만 넣습니다.\n- 명함이 아닌 로고/여백은 넣지 마세요.`;
 
   const response = await ai.models.generateContent({
     model: MODEL,
@@ -182,7 +182,8 @@ function coerceBbox(v: unknown): [number, number, number, number] | null {
   const n = v.map(Number);
   if (n.some((x) => !Number.isFinite(x) || x < 0 || x > 1)) return null;
   const [x0, y0, x1, y1] = n;
-  if (x1 - x0 < 0.1 || y1 - y0 < 0.1) return null; // 너무 작으면 오검출로 간주
+  // 밀집 시트(여러 장)에선 개별 카드가 작으므로 하한을 낮게(5%). 그래도 순서는 유지.
+  if (x1 - x0 < 0.05 || y1 - y0 < 0.05) return null; // 너무 작으면 오검출로 간주
   return [x0, y0, x1, y1];
 }
 
