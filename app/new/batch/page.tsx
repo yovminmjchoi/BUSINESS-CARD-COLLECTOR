@@ -20,7 +20,29 @@ interface Item {
   backBusy?: boolean; // 뒷면 인식 중
   backFilled?: number; // 뒷면으로 채운 빈 칸 수
   dup?: { name: string; company: string; reasons: string[]; strong: boolean } | null; // 중복 후보
+  personNote?: string;
+  companyNote?: string;
 }
+
+// 확인/수정 폼 필드 (성/이름 분리, 전체이름은 자동 합성)
+const FIELDS: { key: keyof CardExtraction; label: string }[] = [
+  { key: "family_name_ko", label: "성 (한글)" },
+  { key: "given_name_ko", label: "이름 (한글)" },
+  { key: "family_name_en", label: "성 (영문)" },
+  { key: "given_name_en", label: "이름 (영문)" },
+  { key: "company_ko", label: "회사 (한글)" },
+  { key: "company_en", label: "회사 (영문)" },
+  { key: "department", label: "부서" },
+  { key: "title_ko", label: "직함 (한글)" },
+  { key: "title_en", label: "직함 (영문)" },
+  { key: "mobile", label: "휴대폰" },
+  { key: "office_phone", label: "유선전화" },
+  { key: "fax", label: "팩스" },
+  { key: "email", label: "이메일" },
+  { key: "website", label: "웹사이트" },
+  { key: "address_ko", label: "주소 (한글)" },
+  { key: "address_en", label: "주소 (영문)" },
+];
 
 function displayName(e: CardExtraction): string {
   const ko = [e.family_name_ko, e.given_name_ko].filter(Boolean).join("");
@@ -62,6 +84,7 @@ export default function BatchNewPage() {
   const backTargetRef = useRef<number | null>(null);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
+  const [openIdx, setOpenIdx] = useState<number | null>(null); // 정보 확인/수정 펼친 카드
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
@@ -173,6 +196,18 @@ export default function BatchNewPage() {
       setTagList((t) => [...t, d.tag]);
       setNewTag("");
     }
+  }
+
+  function setField(i: number, key: keyof CardExtraction, value: string) {
+    setItems((arr) =>
+      arr.map((it, idx) =>
+        idx === i ? { ...it, extraction: { ...it.extraction, [key]: value === "" ? null : value } } : it,
+      ),
+    );
+  }
+
+  function setNote(i: number, which: "personNote" | "companyNote", value: string) {
+    setItems((arr) => arr.map((it, idx) => (idx === i ? { ...it, [which]: value } : it)));
   }
 
   function toggleCardTag(i: number, tagId: string) {
@@ -320,6 +355,8 @@ export default function BatchNewPage() {
             imageFrontPath: sdata.imageFrontPath,
             imageBackPath: sdata.imageBackPath ?? null,
             tagIds: it.tagIds,
+            personNote: it.personNote ?? null,
+            companyNote: it.companyNote ?? null,
           }),
         });
         if (!cres.ok) {
@@ -462,6 +499,13 @@ export default function BatchNewPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={it.backUrl} alt="뒷면" className="h-8 w-12 rounded border border-gray-200 bg-gray-50 object-contain" />
                       )}
+                      <button
+                        type="button"
+                        onClick={() => setOpenIdx((cur) => (cur === i ? null : i))}
+                        className="text-xs font-medium text-blue-600 underline"
+                      >
+                        {openIdx === i ? "정보 접기 ▲" : "정보 확인·수정 ▾"}
+                      </button>
                     </div>
                     {typeof it.backFilled === "number" && !it.backBusy && (
                       <div className={"mt-0.5 text-[11px] " + (it.backFilled > 0 ? "text-green-600" : "text-gray-400")}>
@@ -485,6 +529,42 @@ export default function BatchNewPage() {
                             </button>
                           );
                         })}
+                      </div>
+                    )}
+
+                    {/* 정보 확인/수정 + 메모 */}
+                    {openIdx === i && (
+                      <div className="mt-2 flex flex-col gap-2 rounded-lg border border-gray-200 bg-white p-2">
+                        {FIELDS.map(({ key, label }) => (
+                          <label key={key} className="flex flex-col gap-0.5">
+                            <span className="text-[11px] font-medium text-gray-400">{label}</span>
+                            <input
+                              type="text"
+                              value={(e[key] as string | null) ?? ""}
+                              onChange={(ev) => setField(i, key, ev.target.value)}
+                              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                            />
+                          </label>
+                        ))}
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-medium text-gray-400">인물 메모</span>
+                          <textarea
+                            rows={2}
+                            value={it.personNote ?? ""}
+                            onChange={(ev) => setNote(i, "personNote", ev.target.value)}
+                            placeholder="예: 소개로 만남, 후속 미팅 필요"
+                            className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                          />
+                        </label>
+                        <label className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-medium text-gray-400">회사 메모</span>
+                          <textarea
+                            rows={2}
+                            value={it.companyNote ?? ""}
+                            onChange={(ev) => setNote(i, "companyNote", ev.target.value)}
+                            className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-gray-900 focus:outline-none"
+                          />
+                        </label>
                       </div>
                     )}
                   </div>
