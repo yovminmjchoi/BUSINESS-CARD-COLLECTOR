@@ -113,6 +113,7 @@ export default function BatchNewPage() {
   const itemsRef = useRef<Item[]>([]);
   const [crop, setCrop] = useState<{ idx: number; src: string; suggested: SuggestedBox | null } | null>(null);
   const [backCrop, setBackCrop] = useState<{ idx: number; src: string } | null>(null);
+  const [backEditCrop, setBackEditCrop] = useState<{ idx: number; src: string } | null>(null); // 기존 뒷면 재크롭
   const [openIdx, setOpenIdx] = useState<number | null>(null); // 정보 확인/수정 펼친 카드
   const [unmatchedBacks, setUnmatchedBacks] = useState<BackCard[]>([]); // 짝 못 찾은 뒷장
   const [backSheetBusy, setBackSheetBusy] = useState(false);
@@ -352,6 +353,26 @@ export default function BatchNewPage() {
       setItems((arr) => arr.map((x, idx) => (idx === i ? { ...x, backBusy: false } : x)));
       setError("뒷면 인식에 실패했어요. 다시 시도하세요.");
     }
+  }
+
+  // 이미 붙은 뒷면 이미지를 다시 크롭/회전 (재추출 없이 이미지만 교체)
+  function openBackCrop(i: number) {
+    const url = itemsRef.current[i]?.backUrl;
+    if (!url) return;
+    setBackEditCrop({ idx: i, src: url });
+  }
+
+  function applyBackRecrop(blob: Blob) {
+    if (!backEditCrop) return;
+    const i = backEditCrop.idx;
+    setBackEditCrop(null);
+    setItems((arr) =>
+      arr.map((x, idx) => {
+        if (idx !== i) return x;
+        if (x.backUrl) URL.revokeObjectURL(x.backUrl);
+        return { ...x, backBlob: blob, backUrl: URL.createObjectURL(blob) };
+      }),
+    );
   }
 
   // 뒷장 시트(여러 뒷면이 한 장에) 스캔 → 인식 → 앞면과 내용으로 자동 매칭
@@ -718,6 +739,11 @@ export default function BatchNewPage() {
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={it.backUrl} alt="뒷면" className="h-8 w-12 rounded border border-gray-200 bg-gray-50 object-contain" />
                       )}
+                      {it.backUrl && !it.backBusy && (
+                        <button type="button" onClick={() => openBackCrop(i)} className="text-xs text-blue-600 underline">
+                          뒷면 크롭·회전
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => setOpenIdx((cur) => (cur === i ? null : i))}
@@ -846,6 +872,15 @@ export default function BatchNewPage() {
           src={backCrop.src}
           onApply={finishBack}
           onCancel={closeBackCrop}
+          cancelLabel="취소"
+        />
+      )}
+
+      {backEditCrop && (
+        <ImageCropper
+          src={backEditCrop.src}
+          onApply={applyBackRecrop}
+          onCancel={() => setBackEditCrop(null)}
           cancelLabel="취소"
         />
       )}
