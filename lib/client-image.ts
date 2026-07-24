@@ -165,6 +165,129 @@ export function autoDetectCardBBox(
   return [nx0, ny0, nx1, ny1];
 }
 
+// 시트(여러 명함이 한 장에)에서 개별 명함 영역들을 글자(엣지) 밀도로 추정.
+// 카드/배경 색 대비와 무관 — 글자가 있는 카드면 잡힘. 반환: 정규화 bbox 배열(위→아래, 좌→우).
+export function detectCardRegions(
+  img: HTMLImageElement,
+  maxCards = 12,
+): [number, number, number, number][] {
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  if (!W || !H) return [];
+  const scale = Math.min(1, 640 / Math.max(W, H));
+  const w = Math.max(1, Math.round(W * scale));
+  const h = Math.max(1, Math.round(H * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return [];
+  ctx.drawImage(img, 0, 0, w, h);
+  let data: Uint8ClampedArray;
+  try {
+    data = ctx.getImageData(0, 0, w, h).data;
+  } catch {
+    return [];
+  }
+
+  const gray = new Float32Array(w * h);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    gray[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  }
+
+  // 엣지 에너지를 셀 그리드에 집계
+  const cell = 8;
+  const cols = Math.ceil(w / cell);
+  const rows = Math.ceil(h / cell);
+  const energy = new Float32Array(cols * rows);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const idx = y * w + x;
+      const gx = Math.abs(gray[idx + 1] - gray[idx - 1]);
+      const gy = Math.abs(gray[idx + w] - gray[idx - w]);
+      if (gx + gy > 36) energy[Math.floor(y / cell) * cols + Math.floor(x / cell)] += 1;
+    }
+  }
+  const minPix = cell * cell * 0.06;
+  const content = new Uint8Array(cols * rows);
+  for (let i = 0; i < energy.length; i++) content[i] = energy[i] >= minPix ? 1 : 0;
+
+  // 1셀 팽창 (카드 내부 텍스트 사이 간격 잇기)
+  const dil = new Uint8Array(cols * rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (content[r * cols + c]) { dil[r * cols + c] = 1; continue; }
+      let any = false;
+      for (let dr = -1; dr <= 1 && !any; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const rr = r + dr, cc = c + dc;
+          if (rr >= 0 && rr < rows && cc >= 0 && cc < cols && content[rr * cols + cc]) { any = true; break; }
+        }
+      }
+      dil[r * cols + c] = any ? 1 : 0;
+    }
+  }
+
+  // 연결요소 → 카드 후보
+  const label = new Int32Array(cols * rows).fill(-1);
+  const comps: { minc: number; minr: number; maxc: number; maxr: number; n: number }[] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < cols * rows; start++) {
+    if (!dil[start] || label[start] >= 0) continue;
+    const id = comps.length;
+    label[start] = id;
+    stack.length = 0;
+    stack.push(start);
+    let minc = cols, minr = rows, maxc = 0, maxr = 0, n = 0;
+    while (stack.length) {
+      const cur = stack.pop() as number;
+      const cr = Math.floor(cur / cols), cc = cur % cols;
+      n++;
+      if (cc < minc) minc = cc;
+      if (cc > maxc) maxc = cc;
+      if (cr < minr) minr = cr;
+      if (cr > maxr) maxr = cr;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const rr = cr + dr, ccc = cc + dc;
+          if (rr < 0 || rr >= rows || ccc < 0 || ccc >= cols) continue;
+          const ni = rr * cols + ccc;
+          if (dil[ni] && label[ni] < 0) { label[ni] = id; stack.push(ni); }
+        }
+      }
+    }
+    comps.push({ minc, minr, maxc, maxr, n });
+  }
+
+  const gridArea = cols * rows;
+  return comps
+    .filter((c) => {
+      const bw = c.maxc - c.minc + 1;
+      const bh = c.maxr - c.minr + 1;
+      const area = bw * bh;
+      if (c.n < 6) return false;
+      if (area < gridArea * 0.015) return false; // 너무 작음
+      if (area > gridArea * 0.75) return false; // 거의 전체
+      const ar = bw / bh;
+      if (ar < 0.25 || ar > 4) return false; // 카드 비율 벗어남
+      if (c.n / area < 0.35) return false; // 성긴 잡음
+      return true;
+    })
+    .map((c) => {
+      const x0 = (c.minc * cell) / w;
+      const y0 = (c.minr * cell) / h;
+      const x1 = Math.min(1, ((c.maxc + 1) * cell) / w);
+      const y1 = Math.min(1, ((c.maxr + 1) * cell) / h);
+      const px = (x1 - x0) * 0.06, py = (y1 - y0) * 0.06;
+      return [
+        Math.max(0, x0 - px), Math.max(0, y0 - py),
+        Math.min(1, x1 + px), Math.min(1, y1 + py),
+      ] as [number, number, number, number];
+    })
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    .slice(0, maxCards);
+}
+
 export function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(

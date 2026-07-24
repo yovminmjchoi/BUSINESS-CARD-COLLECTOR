@@ -6,7 +6,7 @@ import Link from "next/link";
 import CameraCapture from "@/components/CameraCapture";
 import ImageCropper, { type SuggestedBox } from "@/components/ImageCropper";
 import { pickUnusedColor, type Tag } from "@/components/TagSelector";
-import { downscale, loadImage, cropBboxToBlob } from "@/lib/client-image";
+import { downscale, loadImage, cropBboxToBlob, detectCardRegions } from "@/lib/client-image";
 import { digitsOnly, pickCompanyNormalized, trigramSimilarity } from "@/lib/normalize";
 import type { CardExtraction } from "@/lib/gemini";
 
@@ -430,24 +430,52 @@ export default function BatchNewPage() {
       const img = await loadImage(url);
       backScanImgRef.current = img;
 
-      const form = new FormData();
-      form.append("front", small);
-      form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
-      const res = await fetch("/api/extract-multi", { method: "POST", body: form });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "뒷장 인식에 실패했습니다.");
-        setBackSheetBusy(false);
-        return;
+      let backs: BackCard[] = [];
+
+      // 1) 앱이 직접 카드 영역을 나눔(글자 밀도) → 각 영역을 개별 추출 (앞면 개별 촬영과 동일)
+      const regions = detectCardRegions(img);
+      if (regions.length >= 2) {
+        const built = await Promise.all(
+          regions.map(async (bbox) => {
+            const blob = await cropBboxToBlob(img, bbox);
+            const f = new FormData();
+            f.append("mode", "detect");
+            f.append("front", new File([blob], "b.jpg", { type: "image/jpeg" }));
+            f.append("front_cropped", "1");
+            const r = await fetch("/api/extract", { method: "POST", body: f });
+            const d = await r.json();
+            const ex = (d.extraction ?? null) as CardExtraction | null;
+            // 내용이 거의 없는 영역(로고·잡음)은 버림
+            if (!ex || !(ex.name_ko || ex.name_en || ex.email || ex.mobile || ex.company_ko || ex.company_en)) {
+              return null;
+            }
+            return { extraction: ex, blob, url: URL.createObjectURL(blob), bbox, srcImg: img } as BackCard;
+          }),
+        );
+        backs = built.filter((x): x is BackCard => x !== null);
       }
-      const cards: CardExtraction[] = data.cards ?? [];
-      const backs: BackCard[] = await Promise.all(
-        cards.map(async (e) => {
-          const bbox: [number, number, number, number] = e.card_bbox ?? [0, 0, 1, 1];
-          const blob = await cropBboxToBlob(img, bbox);
-          return { extraction: e, blob, url: URL.createObjectURL(blob), bbox, srcImg: img };
-        }),
-      );
+
+      // 2) 분할이 잘 안 되면 기존 AI 멀티 인식으로 폴백
+      if (backs.length < 2) {
+        const form = new FormData();
+        form.append("front", small);
+        form.append("front_cropped", small.type === "image/jpeg" ? "1" : "0");
+        const res = await fetch("/api/extract-multi", { method: "POST", body: form });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? "뒷장 인식에 실패했습니다.");
+          setBackSheetBusy(false);
+          return;
+        }
+        const cards: CardExtraction[] = data.cards ?? [];
+        backs = await Promise.all(
+          cards.map(async (e) => {
+            const bbox: [number, number, number, number] = e.card_bbox ?? [0, 0, 1, 1];
+            const blob = await cropBboxToBlob(img, bbox);
+            return { extraction: e, blob, url: URL.createObjectURL(blob), bbox, srcImg: img };
+          }),
+        );
+      }
       matchBacks(backs);
     } catch {
       setError("뒷장 처리 중 오류가 발생했습니다. 다시 시도하세요.");
