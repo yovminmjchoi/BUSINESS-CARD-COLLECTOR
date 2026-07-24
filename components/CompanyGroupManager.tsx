@@ -23,9 +23,11 @@ export interface CompanyGroupSummary {
 export default function CompanyGroupManager({
   companies,
   groups,
+  searchActive = false,
 }: {
   companies: CompanyOption[];
   groups: CompanyGroupSummary[];
+  searchActive?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -65,6 +67,10 @@ export default function CompanyGroupManager({
     setQ("");
     setSelected([]);
     setOpen(false);
+    if (typeof data.group?.id === "string") {
+      router.push(`/companies?g=${encodeURIComponent(data.group.id)}`);
+      return;
+    }
     startTransition(() => router.refresh());
   }
 
@@ -84,9 +90,13 @@ export default function CompanyGroupManager({
       <div className="flex items-center justify-between gap-3 p-4">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-gray-900">회사 묶음</h2>
-          {groups.length > 0 && (
-            <p className="mt-0.5 text-xs text-gray-400">{groups.length}개 묶음</p>
-          )}
+          <p className="mt-0.5 text-xs text-gray-400">
+            {groups.length > 0
+              ? `${groups.length}개 묶음 · 누르면 같이 보기`
+              : searchActive
+                ? "검색된 묶음 없음"
+                : "여러 회사를 한 덩어리로 보기"}
+          </p>
         </div>
         <button
           type="button"
@@ -106,11 +116,11 @@ export default function CompanyGroupManager({
             placeholder="묶음 이름"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
           />
-          <input
-            type="text"
+          <textarea
+            rows={2}
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="메모"
+            placeholder="회사 소개"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
           />
           <input
@@ -173,23 +183,35 @@ export default function CompanyGroupManager({
       {groups.length > 0 && (
         <div className="flex flex-col gap-2 px-4 pb-4">
           {groups.map((group) => (
-            <div key={group.id} className="flex items-center gap-2 rounded-lg border border-gray-200 p-3">
+            <div key={group.id} className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
               <Link href={`/companies?g=${encodeURIComponent(group.id)}`} className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
+                  <span className="flex-shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-medium text-white">
+                    묶음
+                  </span>
                   <span className="truncate text-sm font-medium text-gray-900">{group.name}</span>
-                  <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                  <span className="flex-shrink-0 rounded-full bg-white px-2 py-0.5 text-xs text-blue-700">
                     {group.count}장
                   </span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-gray-400">
                   {group.memberNames.join(", ")}
                 </p>
+                {group.note && (
+                  <p className="mt-0.5 truncate text-xs text-blue-700">{group.note}</p>
+                )}
+              </Link>
+              <Link
+                href={`/companies?g=${encodeURIComponent(group.id)}`}
+                className="flex-shrink-0 rounded border border-blue-300 bg-white px-2 py-1 text-xs font-medium text-blue-700"
+              >
+                열기
               </Link>
               <button
                 type="button"
                 onClick={() => deleteGroup(group.id)}
                 disabled={pending}
-                className="flex-shrink-0 rounded border border-gray-300 px-2 py-1 text-xs text-gray-500 disabled:opacity-40"
+                className="flex-shrink-0 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-500 disabled:opacity-40"
               >
                 해제
               </button>
