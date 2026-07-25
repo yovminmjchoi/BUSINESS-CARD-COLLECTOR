@@ -80,7 +80,7 @@ export default function MeetingLog({
 
   async function save() {
     if (!sfNote.trim() && !rawNotes.trim()) {
-      setError("메모 또는 SF 노트를 입력하세요.");
+      setError("메모 또는 활동 기록을 입력하세요.");
       return;
     }
     setSaving(true);
@@ -127,7 +127,7 @@ export default function MeetingLog({
   return (
     <div className="rounded-lg border border-gray-200 p-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-gray-700">미팅 기록 (Salesforce)</span>
+        <span className="text-sm font-medium text-gray-700">미팅 기록</span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -180,16 +180,16 @@ export default function MeetingLog({
             disabled={generating}
             className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-700 disabled:opacity-50"
           >
-            {generating ? "생성 중…" : "✨ Salesforce 노트 생성"}
+            {generating ? "생성 중…" : "붙여넣기용 기록 생성"}
           </button>
 
           <label className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-medium text-gray-400">Salesforce 노트 (수정 가능)</span>
+            <span className="text-[11px] font-medium text-gray-400">붙여넣기용 활동 기록 (수정 가능)</span>
             <textarea
               rows={5}
               value={sfNote}
               onChange={(e) => setSfNote(e.target.value)}
-              placeholder="생성을 누르면 여기에 영문 활동기록이 만들어져요. 직접 수정해도 됩니다."
+              placeholder="생성을 누르면 여기에 영문 활동 기록이 만들어져요. 직접 수정해도 됩니다."
               className="whitespace-pre-wrap rounded border border-gray-300 px-2 py-1.5 text-sm leading-relaxed focus:border-gray-900 focus:outline-none"
             />
           </label>

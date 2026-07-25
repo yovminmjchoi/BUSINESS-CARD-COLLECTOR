@@ -14,6 +14,11 @@ const TRACKED_FIELDS: (keyof CardExtraction)[] = [
   "email", "website", "address_ko", "address_en",
 ];
 
+const CARD_SEARCH_COLUMNS = [
+  "name_ko", "name_en", "company_ko", "company_en",
+  "title_ko", "title_en", "email", "mobile", "office_phone",
+];
+
 interface SaveBody {
   values: CardExtraction;
   extraction: CardExtraction | null; // AI 원본 (수동 입력 시 null)
@@ -28,6 +33,41 @@ interface SaveBody {
 
 function clean(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+export async function GET(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+  }
+
+  const params = new URL(request.url).searchParams;
+  const q = (params.get("q") ?? "").trim();
+  const limitParam = Number(params.get("limit") ?? 30);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 50) : 30;
+
+  let query = supabase
+    .from("cards")
+    .select("id,name_ko,name_en,company_ko,company_en,title_ko,title_en,email")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  const term = q.replace(/[,()*%]/g, " ").trim();
+  if (term) {
+    query = query.or(
+      CARD_SEARCH_COLUMNS.map((column) => `${column}.ilike.*${term}*`).join(","),
+    );
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ cards: data ?? [] });
 }
 
 export async function POST(request: Request) {
