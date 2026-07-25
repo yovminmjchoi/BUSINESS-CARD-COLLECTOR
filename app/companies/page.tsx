@@ -364,17 +364,24 @@ export default async function CompaniesPage({
         groupName: group?.groupName ?? null,
       };
     });
+  const companyList: CompanyOption[] = list.map((c) => {
+    const group = memberLookup.get(c.key);
+    return {
+      ...c,
+      groupId: group?.groupId ?? null,
+      groupName: group?.groupName ?? null,
+    };
+  });
 
-  const standaloneList = list.filter((company) => company.key === NONE || !memberLookup.has(company.key));
   const visibleGroups = searchTerm
     ? groups.filter((group) =>
         matchesSearch([group.name, group.note, ...group.memberNames], searchTerm),
       )
     : groups;
-  const visibleStandaloneList = searchTerm
-    ? standaloneList.filter((company) => matchesSearch([company.name], searchTerm))
-    : standaloneList;
-  const visibleCount = viewMode === "groups" ? visibleGroups.length : visibleStandaloneList.length;
+  const visibleCompanyList = searchTerm
+    ? companyList.filter((company) => matchesSearch([company.name, company.groupName], searchTerm))
+    : companyList;
+  const visibleCount = viewMode === "groups" ? visibleGroups.length : visibleCompanyList.length;
 
   const SORTS = [
     { v: "", label: "많은순" },
@@ -444,22 +451,29 @@ export default async function CompaniesPage({
           groups={visibleGroups}
           searchActive={Boolean(searchTerm)}
         />
-      ) : visibleStandaloneList.length === 0 ? (
+      ) : visibleCompanyList.length === 0 ? (
         <p className="p-12 text-center text-sm text-gray-400">
           {searchTerm ? "검색 결과가 없습니다." : "아직 저장된 명함이 없습니다."}
         </p>
       ) : (
         <ul>
-          {visibleStandaloneList.map((g) => (
+          {visibleCompanyList.map((g) => (
             <li key={g.key}>
               <Link
                 href={companyDetailHref(g.key, searchQuery, sortBy)}
                 className="flex items-center justify-between border-b border-gray-100 px-4 py-3 active:bg-gray-50"
               >
-                <span className="truncate font-medium text-gray-900">
-                  {g.name}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-gray-900">
+                    {g.name}
+                  </span>
+                  {g.groupName && (
+                    <span className="mt-0.5 block truncate text-xs text-blue-600">
+                      묶음: {g.groupName}
+                    </span>
+                  )}
                 </span>
-                <span className="flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                <span className="ml-3 flex-shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                   {g.count}
                 </span>
               </Link>

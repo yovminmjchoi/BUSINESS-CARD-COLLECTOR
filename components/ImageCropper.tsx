@@ -52,6 +52,14 @@ export default function ImageCropper({
 
   const filterCss = FILTERS.find((f) => f.id === filter)?.css ?? "none";
 
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   function applyBox(box: [number, number, number, number], markTouched: boolean) {
     const [x0, y0, x1, y1] = box;
     setCrop({
@@ -152,7 +160,7 @@ export default function ImageCropper({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-neutral-950 text-white">
+    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden overscroll-contain bg-neutral-950 text-white">
       <div className="shrink-0 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
         <div className="mb-3 flex items-center">
           <span className="min-w-0 flex-1 truncate text-lg font-semibold">

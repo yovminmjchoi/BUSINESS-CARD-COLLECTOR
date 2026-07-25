@@ -37,6 +37,7 @@ function backMatchScore(F: CardExtraction, B: CardExtraction): number {
 }
 const MATCH_THRESHOLD = 60; // 전화/이메일(100) 또는 회사+이름유사 조합
 const WHOLE_IMAGE_EPSILON = 0.02;
+type DuplicateAction = "primary" | "history" | "separate";
 
 interface Item {
   extraction: CardExtraction;
@@ -57,7 +58,7 @@ interface Item {
     reasons: string[];
     strong: boolean;
   } | null; // 중복 후보
-  linkDuplicate?: boolean; // true면 기존 person_id에 연결해 같은 사람 이력으로 저장
+  duplicateAction?: DuplicateAction; // 중복 후보 저장 방식
   personNote?: string;
   companyNote?: string;
   // 뒷면 재크롭 시 여백 포함해 다시 자를 수 있도록 원본 이미지·영역 보관
@@ -260,7 +261,7 @@ export default function BatchNewPage() {
                         reasons,
                         strong,
                       },
-                      linkDuplicate: c.personId ? true : x.linkDuplicate,
+                      duplicateAction: c.personId ? "primary" : "separate",
                     }
                   : x,
               ),
@@ -631,9 +632,18 @@ export default function BatchNewPage() {
     setSaving(true);
     setError("");
     let done = 0;
+    let currentCount = 0;
+    let historyCount = 0;
+    let separateCount = 0;
+    const skippedCount = items.filter((it) => !it.include).length;
     try {
       for (const it of items) {
         if (!it.include) continue;
+        const duplicateAction = it.duplicateAction ?? (it.dup?.personId ? "primary" : "separate");
+        if (it.dup?.personId && duplicateAction === "primary") currentCount += 1;
+        else if (it.dup?.personId && duplicateAction === "history") historyCount += 1;
+        else if (it.dup) separateCount += 1;
+
         const storeForm = new FormData();
         storeForm.append("mode", "store");
         storeForm.append("front", new File([it.blob], "card.jpg", { type: "image/jpeg" }));
@@ -656,8 +666,8 @@ export default function BatchNewPage() {
             tagIds: it.tagIds,
             personNote: it.personNote ?? null,
             companyNote: it.companyNote ?? null,
-            personId: it.linkDuplicate && it.dup?.personId ? it.dup.personId : null,
-            setPrimary: false,
+            personId: duplicateAction !== "separate" && it.dup?.personId ? it.dup.personId : null,
+            setPrimary: duplicateAction === "primary",
           }),
         });
         if (!cres.ok) {
@@ -667,7 +677,15 @@ export default function BatchNewPage() {
         done += 1;
         setProgress(done);
       }
-      router.push(`/?done=batch&n=${done}`);
+      const params = new URLSearchParams({
+        done: "batch",
+        n: String(done),
+      });
+      if (currentCount) params.set("current", String(currentCount));
+      if (historyCount) params.set("history", String(historyCount));
+      if (separateCount) params.set("separate", String(separateCount));
+      if (skippedCount) params.set("skipped", String(skippedCount));
+      router.push(`/?${params.toString()}`);
     } catch (e) {
       setError(`${done}개 저장 후 실패: ${e instanceof Error ? e.message : ""}`);
       setSaving(false);
@@ -804,6 +822,7 @@ export default function BatchNewPage() {
               const company = e.company_ko || e.company_en || "";
               const title = e.title_ko || e.title_en || "";
               const contact = e.mobile || e.email || "";
+              const duplicateAction = it.duplicateAction ?? (it.dup?.personId ? "primary" : "separate");
               return (
                 <li
                   key={i}
@@ -831,31 +850,46 @@ export default function BatchNewPage() {
                     )}
                     {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
                     {it.dup && (
-                      <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                        <div>
-                          ⚠ 이미 있는 명함일 수 있어요: <span className="font-medium">{it.dup.name}</span>
+                      <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
+                        <div className="font-medium">
+                          기존 사람의 새 명함일 수 있어요
+                        </div>
+                        <div className="mt-0.5">
+                          기존: <span className="font-medium">{it.dup.name}</span>
                           {it.dup.company ? ` (${it.dup.company})` : ""}
                           {it.dup.title ? ` · ${it.dup.title}` : ""} · {it.dup.reasons.join(", ")}
                         </div>
                         <div className="mt-1 text-amber-700">
-                          저장 체크는 유지됩니다. 승진·직무변경 명함이면 그대로 저장하세요.
+                          승진·직무변경이면 아래 기본값처럼 현재 명함으로 저장하세요.
                         </div>
                         {it.dup.personId && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setItems((arr) =>
-                                arr.map((x, idx) =>
-                                  idx === i ? { ...x, linkDuplicate: !x.linkDuplicate } : x,
-                                ),
-                              )
-                            }
-                            className="mt-1 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-800"
-                          >
-                            {it.linkDuplicate
-                              ? "같은 사람 이력으로 저장됨 · 다른 사람으로 바꾸기"
-                              : "다른 사람으로 저장됨 · 같은 사람 이력으로 바꾸기"}
-                          </button>
+                          <div className="mt-2 grid grid-cols-3 gap-1">
+                            {([
+                              { value: "primary", label: "현재 명함" },
+                              { value: "history", label: "이력만" },
+                              { value: "separate", label: "다른 사람" },
+                            ] as const).map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() =>
+                                  setItems((arr) =>
+                                    arr.map((x, idx) =>
+                                      idx === i ? { ...x, duplicateAction: option.value } : x,
+                                    ),
+                                  )
+                                }
+                                className={
+                                  "min-h-8 rounded border px-1 text-[11px] font-medium " +
+                                  (duplicateAction === option.value
+                                    ? "border-amber-700 bg-amber-700 text-white"
+                                    : "border-amber-300 bg-white text-amber-800")
+                                }
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}

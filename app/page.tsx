@@ -29,6 +29,10 @@ export default async function ListPage({
     tag?: string;
     done?: string;
     n?: string;
+    current?: string;
+    history?: string;
+    separate?: string;
+    skipped?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -36,6 +40,12 @@ export default async function ListPage({
   const status = sp.status ?? "";
   const sort = sp.sort ?? "";
   const tag = sp.tag ?? "";
+  const batchParts = [
+    sp.current ? `현재 명함 ${sp.current}장` : "",
+    sp.history ? `이력 ${sp.history}장` : "",
+    sp.separate ? `별도 저장 ${sp.separate}장` : "",
+    sp.skipped ? `제외 ${sp.skipped}장` : "",
+  ].filter(Boolean);
   const flash =
     sp.done === "saved"
       ? "저장되었습니다."
@@ -46,7 +56,7 @@ export default async function ListPage({
           : sp.done === "primary"
             ? "현재 명함으로 지정했습니다."
             : sp.done === "batch"
-              ? `${sp.n ?? ""}개 명함을 저장했습니다.`
+              ? `${sp.n ?? ""}개 명함을 저장했습니다${batchParts.length ? ` (${batchParts.join(" · ")})` : ""}.`
               : null;
 
   const supabase = await createClient();
