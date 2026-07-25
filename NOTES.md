@@ -48,6 +48,19 @@ _갱신: 2026-07-25 · 코_
   - 가벼운 시작: "회사 → 부서 2단계 뷰"(회사 탭에서 부서별 접기).
   - 완전한 트리: department 문자열 파싱/구조화 필요 → 큰 작업. 데이터 쌓인 뒤 실제 모양 보고.
 
+### 🗓️ 미팅 캘린더 + Salesforce 활동기록 (계획 확정, 착수 대기)
+사용자 확정 스코프 — **SF API 연동 X, 녹음 X, 유료 STT X** (전부 무료·기존 도구로):
+- **미팅 기록:** 명함(사람)에 미팅 붙여 저장. Supabase `meetings` 테이블(owner_id, card_id,
+  meeting_date, activity(dinner/call/site visit…), raw_notes, sf_note, created_at) + RLS.
+- **SF식 자동 정리:** 사용자가 거친 메모/키워드 입력 → **무료 Gemini**로 `lib/prompts/sf-activity.md`
+  지침대로 영어 활동기록 생성. 항상 "MJ had a dinner meeting with ~" 형식. 이름은 내 정보(`/me`)에서.
+  → 사용자 편집 가능 → 저장 → **복사 버튼**으로 Salesforce에 붙여넣기(연동 대신 복사).
+- **캘린더 뷰:** 미팅을 날짜별 목록 / 간단 월간 뷰. 명함 상세엔 "미팅 기록" 섹션.
+- **단계:** ① meetings 테이블+명함 상세 미팅 추가/목록 → ② Gemini SF노트 생성+복사 →
+  ③ 캘린더 뷰 → (나중·선택) `.ics` 캘린더 추가, 녹음/음성.
+- 파일: `lib/prompts/sf-activity.md`(작성됨), 새 `supabase/migrations/0009_meetings.sql`,
+  `app/api/meetings/*`, `components/MeetingLog.tsx`, 캘린더 페이지 — 코 작업과 안 겹치게 새 파일 위주.
+
 ### 그 외 (대화 중 언급, 미구현)
 - [ ] **태그 이모지 아이콘** — 노션 스타일. `tags.icon` 컬럼 추가 필요.
 - [ ] **태그 계층/대분류→소분류** — 스코프 주의(심플 원칙).
