@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
@@ -166,7 +167,8 @@ export default function NewCardPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col gap-5 p-6">
       <header>
-        <h1 className="text-xl font-bold">명함 촬영</h1>
+        <Link href="/" className="text-sm text-gray-500">← 목록</Link>
+        <h1 className="mt-2 text-xl font-bold">명함 촬영</h1>
         <p className="mt-1 text-sm text-gray-500">
           찍으면 명함 영역을 자동으로 잡아줘요. 확인하고 진행하세요.
         </p>
