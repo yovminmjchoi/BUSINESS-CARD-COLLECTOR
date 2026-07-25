@@ -46,13 +46,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
+  const cardId = clean(body.cardId);
+  if (cardId) {
+    const { data: card, error: cardError } = await supabase
+      .from("cards")
+      .select("id")
+      .eq("id", cardId)
+      .maybeSingle();
+    if (cardError) {
+      return NextResponse.json({ error: cardError.message }, { status: 500 });
+    }
+    if (!card) {
+      return NextResponse.json({ error: "명함을 찾을 수 없습니다." }, { status: 404 });
+    }
+  }
+
+  const rawNotes = clean(body.rawNotes);
+  const sfNote = clean(body.sfNote);
+  if (!rawNotes && !sfNote) {
+    return NextResponse.json({ error: "미팅 메모를 입력하세요." }, { status: 400 });
+  }
+
   const row = {
     owner_id: user.id,
-    card_id: clean(body.cardId),
+    card_id: cardId,
     meeting_date: clean(body.meetingDate) ?? new Date().toISOString().slice(0, 10),
     activity: clean(body.activity) ?? "meeting",
-    raw_notes: clean(body.rawNotes),
-    sf_note: clean(body.sfNote),
+    raw_notes: rawNotes,
+    sf_note: sfNote,
   };
 
   const { data, error } = await supabase

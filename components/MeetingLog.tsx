@@ -210,26 +210,31 @@ export default function MeetingLog({
       {/* 저장된 미팅 목록 */}
       {meetings.length > 0 && (
         <ul className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3">
-          {meetings.map((m) => (
-            <li key={m.id} className="rounded-lg bg-gray-50 p-2">
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>{m.meeting_date} · {m.activity}</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => copy(m)} className="text-blue-600 underline">
-                    {copiedId === m.id ? "복사됨 ✓" : "복사"}
-                  </button>
-                  <button type="button" onClick={() => remove(m.id)} className="text-red-500 underline">
-                    삭제
-                  </button>
+          {meetings.map((m) => {
+            const note = m.sf_note || m.raw_notes || "";
+            return (
+              <li key={m.id} className="rounded-lg bg-gray-50 p-2">
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>{m.meeting_date} · {m.activity}</span>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => copy(m)} className="text-blue-600 underline">
+                      {copiedId === m.id ? "복사됨 ✓" : "복사"}
+                    </button>
+                    <button type="button" onClick={() => remove(m.id)} className="text-red-500 underline">
+                      삭제
+                    </button>
+                  </div>
                 </div>
-              </div>
-              {m.sf_note && (
-                <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">
-                  {m.sf_note}
-                </pre>
-              )}
-            </li>
-          ))}
+                {note ? (
+                  <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">
+                    {note}
+                  </pre>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-400">메모 없음</p>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

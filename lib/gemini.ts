@@ -75,7 +75,9 @@ export async function generateSalesforceNote(input: {
   contactCompany?: string;
 }): Promise<string> {
   const ai = getClient();
-  const prompt = loadSfPrompt().replaceAll("{{MY_NAME}}", input.myName || "I");
+  const prompt = loadSfPrompt()
+    .replaceAll("{{MY_NAME}}", input.myName || "I")
+    .replaceAll("{{ACTIVITY}}", input.activity || "meeting");
   const ctx = [
     `활동(Activity): ${input.activity || "meeting"}`,
     input.contactName ? `상대: ${input.contactName}` : "",

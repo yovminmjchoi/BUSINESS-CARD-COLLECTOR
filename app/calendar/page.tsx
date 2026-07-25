@@ -80,6 +80,7 @@ export default function CalendarPage() {
               <div className="text-xs font-semibold text-gray-500">{g.date}</div>
               {g.items.map((m) => {
                 const c = contactOf(m);
+                const note = m.sf_note || m.raw_notes || "";
                 return (
                   <div key={m.id} className="rounded-lg border border-gray-200 p-3">
                     <div className="flex items-center justify-between">
@@ -103,9 +104,9 @@ export default function CalendarPage() {
                         {copiedId === m.id ? "복사됨 ✓" : "복사"}
                       </button>
                     </div>
-                    {m.sf_note && (
+                    {note && (
                       <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">
-                        {m.sf_note}
+                        {note}
                       </pre>
                     )}
                   </div>
