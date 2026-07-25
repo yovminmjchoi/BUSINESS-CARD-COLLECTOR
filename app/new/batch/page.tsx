@@ -48,7 +48,16 @@ interface Item {
   backUrl?: string;
   backBusy?: boolean; // 뒷면 인식 중
   backFilled?: number; // 뒷면으로 채운 빈 칸 수
-  dup?: { name: string; company: string; reasons: string[]; strong: boolean } | null; // 중복 후보
+  dup?: {
+    id: string;
+    personId: string | null;
+    name: string;
+    company: string;
+    title: string;
+    reasons: string[];
+    strong: boolean;
+  } | null; // 중복 후보
+  linkDuplicate?: boolean; // true면 기존 person_id에 연결해 같은 사람 이력으로 저장
   personNote?: string;
   companyNote?: string;
   // 뒷면 재크롭 시 여백 포함해 다시 자를 수 있도록 원본 이미지·영역 보관
@@ -215,7 +224,7 @@ export default function BatchNewPage() {
           .catch(() => {});
       });
 
-      // 각 명함 중복 감지 (이메일/전화/이름·회사). 강한 일치(이메일·전화)면 기본 제외.
+      // 각 명함 중복 감지 (이메일/전화/이름·회사). 중복이어도 승진·직무변경 명함일 수 있으니 저장은 막지 않는다.
       built.forEach((it, i) => {
         const e = it.extraction;
         fetch("/api/duplicates", {
@@ -233,7 +242,8 @@ export default function BatchNewPage() {
           .then((d) => {
             const c = d.candidates?.[0];
             if (!c) return;
-            const strong = (c.reasons ?? []).some(
+            const reasons = c.reasons ?? [];
+            const strong = reasons.some(
               (r: string) => r.includes("이메일") || r.includes("전화"),
             );
             setItems((arr) =>
@@ -241,8 +251,16 @@ export default function BatchNewPage() {
                 idx === i
                   ? {
                       ...x,
-                      dup: { name: c.name, company: c.company, reasons: c.reasons ?? [], strong },
-                      include: strong ? false : x.include, // 확실한 중복은 기본 제외
+                      dup: {
+                        id: c.id,
+                        personId: c.personId ?? null,
+                        name: c.name,
+                        company: c.company,
+                        title: c.title ?? "",
+                        reasons,
+                        strong,
+                      },
+                      linkDuplicate: c.personId ? true : x.linkDuplicate,
                     }
                   : x,
               ),
@@ -638,6 +656,8 @@ export default function BatchNewPage() {
             tagIds: it.tagIds,
             personNote: it.personNote ?? null,
             companyNote: it.companyNote ?? null,
+            personId: it.linkDuplicate && it.dup?.personId ? it.dup.personId : null,
+            setPrimary: false,
           }),
         });
         if (!cres.ok) {
@@ -812,9 +832,31 @@ export default function BatchNewPage() {
                     {contact && <div className="truncate text-xs text-gray-400">{contact}</div>}
                     {it.dup && (
                       <div className="mt-1 rounded bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-                        ⚠ 이미 있는 명함일 수 있어요: <span className="font-medium">{it.dup.name}</span>
-                        {it.dup.company ? ` (${it.dup.company})` : ""} · {it.dup.reasons.join(", ")}
-                        {it.dup.strong ? " — 기본 제외됨" : ""}
+                        <div>
+                          ⚠ 이미 있는 명함일 수 있어요: <span className="font-medium">{it.dup.name}</span>
+                          {it.dup.company ? ` (${it.dup.company})` : ""}
+                          {it.dup.title ? ` · ${it.dup.title}` : ""} · {it.dup.reasons.join(", ")}
+                        </div>
+                        <div className="mt-1 text-amber-700">
+                          저장 체크는 유지됩니다. 승진·직무변경 명함이면 그대로 저장하세요.
+                        </div>
+                        {it.dup.personId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setItems((arr) =>
+                                arr.map((x, idx) =>
+                                  idx === i ? { ...x, linkDuplicate: !x.linkDuplicate } : x,
+                                ),
+                              )
+                            }
+                            className="mt-1 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] font-medium text-amber-800"
+                          >
+                            {it.linkDuplicate
+                              ? "같은 사람 이력으로 저장됨 · 다른 사람으로 바꾸기"
+                              : "다른 사람으로 저장됨 · 같은 사람 이력으로 바꾸기"}
+                          </button>
+                        )}
                       </div>
                     )}
                     <div className="mt-1 flex flex-wrap items-center gap-3">
