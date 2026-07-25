@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS = [
   { href: "/", label: "목록" },
   { href: "/companies", label: "회사" },
+  { href: "/calendar", label: "미팅" },
   { href: "/tags", label: "태그" },
   { href: "/settings", label: "설정" },
 ];

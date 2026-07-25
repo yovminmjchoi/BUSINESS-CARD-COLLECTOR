@@ -55,6 +55,42 @@ function loadPrompt(): string {
   return cachedPrompt;
 }
 
+let cachedSfPrompt: string | null = null;
+function loadSfPrompt(): string {
+  if (cachedSfPrompt === null) {
+    cachedSfPrompt = readFileSync(
+      join(process.cwd(), "lib", "prompts", "sf-activity.md"),
+      "utf8",
+    );
+  }
+  return cachedSfPrompt;
+}
+
+// 거친 미팅 메모 → Salesforce 활동기록(영문). 지침은 sf-activity.md, 이름은 실행 시 주입.
+export async function generateSalesforceNote(input: {
+  myName: string;
+  rawNotes: string;
+  activity: string;
+  contactName?: string;
+  contactCompany?: string;
+}): Promise<string> {
+  const ai = getClient();
+  const prompt = loadSfPrompt().replaceAll("{{MY_NAME}}", input.myName || "I");
+  const ctx = [
+    `활동(Activity): ${input.activity || "meeting"}`,
+    input.contactName ? `상대: ${input.contactName}` : "",
+    input.contactCompany ? `상대 회사: ${input.contactCompany}` : "",
+    `메모: ${input.rawNotes}`,
+  ].filter(Boolean).join("\n");
+
+  const response = await ai.models.generateContent({
+    model: MODEL,
+    contents: [{ role: "user", parts: [{ text: prompt }, { text: `\n\n## 입력\n${ctx}` }] }],
+    config: { temperature: 0.3 },
+  });
+  return (response.text ?? "").trim();
+}
+
 let cachedClient: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
   if (cachedClient === null) {

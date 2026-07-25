@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import TagSelector from "@/components/TagSelector";
+import MeetingLog from "@/components/MeetingLog";
 import ImageCropper from "@/components/ImageCropper";
 import { downscale } from "@/lib/client-image";
 import { loadProfile, buildComposeLinks, hasSignature, type MyProfile } from "@/lib/profile";
@@ -511,6 +512,18 @@ export default function CardDetail({
       </div>
 
       <TagSelector value={tagIds} onChange={setTagIds} />
+
+      <MeetingLog
+        cardId={card.id as string}
+        contactName={
+          [form.family_name_en, form.given_name_en].filter(Boolean).join(" ") ||
+          [form.family_name_ko, form.given_name_ko].filter(Boolean).join("") ||
+          (card.name_en as string | null) ||
+          (card.name_ko as string | null) ||
+          ""
+        }
+        contactCompany={form.company_en || form.company_ko || (card.company_en as string | null) || (card.company_ko as string | null) || ""}
+      />
 
       {reanalyzed && (
         <div
