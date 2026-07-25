@@ -1,9 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import TabBar from "@/components/TabBar";
 import { loadProfile } from "@/lib/profile";
+
+type CalView = "month" | "week" | "day";
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function ymd(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function monthCells(cursor: Date): Date[] {
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(1 - first.getDay()); // 그 주 일요일로
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
+function weekCells(cursor: Date): Date[] {
+  const start = new Date(cursor);
+  start.setDate(cursor.getDate() - cursor.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+}
 
 interface CardMini {
   name_ko: string | null;
@@ -58,6 +87,9 @@ export default function CalendarPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [view, setView] = useState<CalView>("month");
+  const [cursor, setCursor] = useState<Date>(() => new Date());
+  const [selDate, setSelDate] = useState<string>(() => ymd(new Date()));
   const [composerOpen, setComposerOpen] = useState(false);
   const [cardQuery, setCardQuery] = useState("");
   const [cardResults, setCardResults] = useState<CardSearchResult[]>([]);
@@ -210,13 +242,34 @@ export default function CalendarPage() {
     }
   }
 
-  // 날짜별 그룹 (이미 date desc 정렬됨)
-  const groups: { date: string; items: Meeting[] }[] = [];
-  for (const m of meetings) {
-    const last = groups[groups.length - 1];
-    if (last && last.date === m.meeting_date) last.items.push(m);
-    else groups.push({ date: m.meeting_date, items: [m] });
+  // 날짜(yyyy-mm-dd) → 미팅들
+  const byDate = useMemo(() => {
+    const map = new Map<string, Meeting[]>();
+    for (const m of meetings) {
+      const arr = map.get(m.meeting_date) ?? [];
+      arr.push(m);
+      map.set(m.meeting_date, arr);
+    }
+    return map;
+  }, [meetings]);
+
+  const todayKey = ymd(new Date());
+  const cells = view === "week" ? weekCells(cursor) : monthCells(cursor);
+  const title =
+    view === "day"
+      ? selDate
+      : `${cursor.getFullYear()}년 ${cursor.getMonth() + 1}월${view === "week" ? ` ${Math.ceil((cursor.getDate() + new Date(cursor.getFullYear(), cursor.getMonth(), 1).getDay()) / 7)}주` : ""}`;
+
+  function shift(dir: 1 | -1) {
+    const d = new Date(cursor);
+    if (view === "month") d.setMonth(d.getMonth() + dir);
+    else if (view === "week") d.setDate(d.getDate() + dir * 7);
+    else d.setDate(d.getDate() + dir);
+    setCursor(d);
+    if (view === "day") setSelDate(ymd(d));
   }
+
+  const dayMeetings = byDate.get(selDate) ?? [];
 
   return (
     <main className="mx-auto min-h-screen max-w-md pb-24">
@@ -353,55 +406,101 @@ export default function CalendarPage() {
         </section>
       )}
 
-      {loading ? (
-        <p className="p-8 text-center text-sm text-gray-400">불러오는 중…</p>
-      ) : meetings.length === 0 ? (
-        <p className="p-8 text-center text-sm text-gray-400">
-          아직 미팅 기록이 없어요. 위의 “미팅 추가”로 남겨보세요.
-        </p>
-      ) : (
-        <div className="flex flex-col gap-4 p-4">
-          {groups.map((g) => (
-            <div key={g.date} className="flex flex-col gap-2">
-              <div className="text-xs font-semibold text-gray-500">{g.date}</div>
-              {g.items.map((m) => {
-                const c = contactOf(m);
-                const note = m.sf_note || m.raw_notes || "";
-                return (
-                  <div key={m.id} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        {m.card_id ? (
-                          <Link href={`/card/${m.card_id}`} className="truncate text-sm font-medium text-gray-900 underline">
-                            {c.name}
-                          </Link>
-                        ) : (
-                          <span className="text-sm font-medium text-gray-900">{c.name}</span>
-                        )}
-                        <span className="ml-1 text-xs text-gray-400">
-                          {[c.company, m.activity].filter(Boolean).join(" · ")}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copy(m)}
-                        className="flex-shrink-0 text-xs text-blue-600 underline"
-                      >
-                        {copiedId === m.id ? "복사됨 ✓" : "기록 복사"}
-                      </button>
-                    </div>
-                    {note && (
-                      <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">
-                        {note}
-                      </pre>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+      {/* 달력 툴바 */}
+      <div className="flex items-center justify-between gap-2 px-4 pt-3">
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => shift(-1)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm">‹</button>
+          <span className="min-w-[7rem] text-center text-sm font-semibold text-gray-800">{title}</span>
+          <button type="button" onClick={() => shift(1)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm">›</button>
+          <button
+            type="button"
+            onClick={() => { const n = new Date(); setCursor(n); setSelDate(ymd(n)); }}
+            className="ml-1 rounded-lg border border-gray-300 px-2 py-1 text-xs text-gray-600"
+          >오늘</button>
+        </div>
+        <div className="flex overflow-hidden rounded-lg border border-gray-300 text-xs">
+          {(["month", "week", "day"] as CalView[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={"px-2.5 py-1 " + (view === v ? "bg-gray-900 text-white" : "text-gray-600")}
+            >
+              {v === "month" ? "월" : v === "week" ? "주" : "일"}
+            </button>
           ))}
         </div>
+      </div>
+
+      {/* 월/주 그리드 */}
+      {view !== "day" && (
+        <div className="px-4 pt-2">
+          <div className="grid grid-cols-7 text-center text-[11px] text-gray-400">
+            {WEEKDAYS.map((w) => <div key={w} className="py-1">{w}</div>)}
+          </div>
+          <div className={"grid grid-cols-7 gap-1 " + (view === "week" ? "" : "")}>
+            {cells.map((d) => {
+              const key = ymd(d);
+              const inMonth = view === "week" || d.getMonth() === cursor.getMonth();
+              const count = (byDate.get(key) ?? []).length;
+              const isSel = key === selDate;
+              const isToday = key === todayKey;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setSelDate(key); if (view === "week") setCursor(d); }}
+                  className={
+                    "flex aspect-square flex-col items-center justify-center rounded-lg text-sm " +
+                    (isSel ? "bg-blue-600 text-white" : inMonth ? "text-gray-800" : "text-gray-300") +
+                    (isToday && !isSel ? " ring-1 ring-blue-400" : "")
+                  }
+                >
+                  <span>{d.getDate()}</span>
+                  {count > 0 && (
+                    <span className={"mt-0.5 h-1.5 w-1.5 rounded-full " + (isSel ? "bg-white" : "bg-blue-500")} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
+
+      {/* 선택한 날의 미팅 */}
+      <div className="flex flex-col gap-2 p-4">
+        <div className="text-xs font-semibold text-gray-500">{selDate} · {dayMeetings.length}건</div>
+        {loading ? (
+          <p className="py-6 text-center text-sm text-gray-400">불러오는 중…</p>
+        ) : dayMeetings.length === 0 ? (
+          <p className="py-6 text-center text-sm text-gray-400">이 날 미팅이 없어요. 위 “미팅 추가”로 남겨보세요.</p>
+        ) : (
+          dayMeetings.map((m) => {
+            const c = contactOf(m);
+            const note = m.sf_note || m.raw_notes || "";
+            return (
+              <div key={m.id} className="rounded-lg border border-gray-200 p-3">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    {m.card_id ? (
+                      <Link href={`/card/${m.card_id}`} className="truncate text-sm font-medium text-gray-900 underline">{c.name}</Link>
+                    ) : (
+                      <span className="text-sm font-medium text-gray-900">{c.name}</span>
+                    )}
+                    <span className="ml-1 text-xs text-gray-400">{[c.company, m.activity].filter(Boolean).join(" · ")}</span>
+                  </div>
+                  <button type="button" onClick={() => copy(m)} className="flex-shrink-0 text-xs text-blue-600 underline">
+                    {copiedId === m.id ? "복사됨 ✓" : "기록 복사"}
+                  </button>
+                </div>
+                {note && (
+                  <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">{note}</pre>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
 
       <TabBar />
     </main>
