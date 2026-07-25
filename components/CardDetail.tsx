@@ -358,7 +358,7 @@ export default function CardDetail({
           <img
             src={frontUrl}
             alt="명함 앞면"
-            className="max-h-44 w-auto self-start rounded-lg border border-gray-200 object-contain"
+            className="max-h-32 w-auto max-w-[60%] self-start rounded-lg border border-gray-200 object-contain"
           />
         ) : (
           <div className="flex h-24 items-center justify-center rounded-lg bg-gray-100 text-sm text-gray-400">
@@ -389,7 +389,7 @@ export default function CardDetail({
           <img
             src={backUrl}
             alt="명함 뒷면"
-            className="max-h-44 w-auto self-start rounded-lg border border-gray-200 object-contain"
+            className="max-h-32 w-auto max-w-[60%] self-start rounded-lg border border-gray-200 object-contain"
           />
         )}
         <div className="flex gap-2 text-xs">
