@@ -90,6 +90,9 @@ export default function CalendarPage() {
   const [view, setView] = useState<CalView>("month");
   const [cursor, setCursor] = useState<Date>(() => new Date());
   const [selDate, setSelDate] = useState<string>(() => ymd(new Date()));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
   const [cardQuery, setCardQuery] = useState("");
   const [cardResults, setCardResults] = useState<CardSearchResult[]>([]);
@@ -156,6 +159,28 @@ export default function CalendarPage() {
       setTimeout(() => setCopiedId((c) => (c === m.id ? null : c)), 1500);
     } catch {
       /* 무시 */
+    }
+  }
+
+  function startEdit(m: Meeting) {
+    setEditingId(m.id);
+    setEditText(m.sf_note || m.raw_notes || "");
+  }
+
+  async function saveEdit(id: string) {
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/meetings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sfNote: editText }),
+      });
+      if (res.ok) {
+        setMeetings((list) => list.map((x) => (x.id === id ? { ...x, sf_note: editText } : x)));
+        setEditingId(null);
+      }
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -489,12 +514,30 @@ export default function CalendarPage() {
                     )}
                     <span className="ml-1 text-xs text-gray-400">{[c.company, m.activity].filter(Boolean).join(" · ")}</span>
                   </div>
-                  <button type="button" onClick={() => copy(m)} className="flex-shrink-0 text-xs text-blue-600 underline">
-                    {copiedId === m.id ? "복사됨 ✓" : "기록 복사"}
-                  </button>
+                  <div className="flex flex-shrink-0 gap-2 text-xs">
+                    <button type="button" onClick={() => startEdit(m)} className="text-gray-500 underline">수정</button>
+                    <button type="button" onClick={() => copy(m)} className="text-blue-600 underline">
+                      {copiedId === m.id ? "복사됨 ✓" : "복사"}
+                    </button>
+                  </div>
                 </div>
-                {note && (
-                  <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">{note}</pre>
+                {editingId === m.id ? (
+                  <div className="mt-2 flex flex-col gap-2">
+                    <textarea
+                      rows={5}
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      className="whitespace-pre-wrap rounded border border-gray-300 px-2 py-1.5 text-sm leading-relaxed focus:border-gray-900 focus:outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => saveEdit(m.id)} disabled={editSaving} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50">
+                        {editSaving ? "저장 중…" : "저장"}
+                      </button>
+                      <button type="button" onClick={() => setEditingId(null)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600">취소</button>
+                    </div>
+                  </div>
+                ) : (
+                  note && <pre className="mt-1 whitespace-pre-wrap break-words font-sans text-sm text-gray-800">{note}</pre>
                 )}
               </div>
             );

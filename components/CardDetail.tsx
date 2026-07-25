@@ -90,6 +90,7 @@ export default function CardDetail({
   const [imgBusy, setImgBusy] = useState(false);
   const [profile, setProfile] = useState<MyProfile | null>(null);
   const [showMailApps, setShowMailApps] = useState(false);
+  const [showPhotoMgmt, setShowPhotoMgmt] = useState(false);
 
   useEffect(() => {
     setProfile(loadProfile());
@@ -351,62 +352,56 @@ export default function CardDetail({
         );
       })()}
 
-      {/* 앞면 사진 + 관리 */}
+      {/* 명함 사진 — 앞·뒤 미니 썸네일 나란히 + 사진관리 접기 */}
       <div className="flex flex-col gap-1.5">
-        {frontUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={frontUrl}
-            alt="명함 앞면"
-            className="max-h-32 w-auto max-w-[60%] self-start rounded-lg border border-gray-200 object-contain"
-          />
-        ) : (
-          <div className="flex h-24 items-center justify-center rounded-lg bg-gray-100 text-sm text-gray-400">
-            앞면 사진 없음
+        <div className="flex items-center gap-2">
+          {frontUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={frontUrl} alt="명함 앞면" className="h-16 w-auto max-w-[42%] rounded border border-gray-200 object-contain" />
+          ) : (
+            <div className="flex h-16 w-24 items-center justify-center rounded bg-gray-100 text-[11px] text-gray-400">앞면 없음</div>
+          )}
+          {backUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={backUrl} alt="명함 뒷면" className="h-16 w-auto max-w-[42%] rounded border border-gray-200 object-contain" />
+          )}
+          <button
+            type="button"
+            onClick={() => setShowPhotoMgmt((v) => !v)}
+            className="ml-auto flex-shrink-0 text-xs text-gray-400 underline"
+          >
+            {showPhotoMgmt ? "닫기" : "사진 관리"}
+          </button>
+        </div>
+
+        {showPhotoMgmt && (
+          <div className="flex flex-col gap-1.5 rounded-lg border border-gray-100 bg-gray-50 p-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-gray-400">앞면</span>
+              {frontUrl && (
+                <button type="button" disabled={imgBusy} onClick={() => cropExisting("front", frontUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">크롭</button>
+              )}
+              <button type="button" disabled={imgBusy} onClick={() => frontInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+                {frontUrl ? "다시 찍기" : "앞면 사진 추가"}
+              </button>
+              {frontUrl && (
+                <button type="button" disabled={imgBusy} onClick={() => deleteImage("front")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">사진 삭제</button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-gray-400">뒷면</span>
+              {backUrl && (
+                <button type="button" disabled={imgBusy} onClick={() => cropExisting("back", backUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">크롭</button>
+              )}
+              <button type="button" disabled={imgBusy} onClick={() => backInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
+                {backUrl ? "뒷면 다시 찍기" : "뒷면 사진 추가"}
+              </button>
+              {backUrl && (
+                <button type="button" disabled={imgBusy} onClick={() => deleteImage("back")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">사진 삭제</button>
+              )}
+            </div>
           </div>
         )}
-        <div className="flex gap-2 text-xs">
-          {frontUrl && (
-            <button type="button" disabled={imgBusy} onClick={() => cropExisting("front", frontUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
-              크롭
-            </button>
-          )}
-          <button type="button" disabled={imgBusy} onClick={() => frontInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
-            {frontUrl ? "다시 찍기" : "앞면 사진 추가"}
-          </button>
-          {frontUrl && (
-            <button type="button" disabled={imgBusy} onClick={() => deleteImage("front")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">
-              사진 삭제
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 뒷면 사진 + 관리 */}
-      <div className="flex flex-col gap-1.5">
-        {backUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={backUrl}
-            alt="명함 뒷면"
-            className="max-h-32 w-auto max-w-[60%] self-start rounded-lg border border-gray-200 object-contain"
-          />
-        )}
-        <div className="flex gap-2 text-xs">
-          {backUrl && (
-            <button type="button" disabled={imgBusy} onClick={() => cropExisting("back", backUrl)} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
-              크롭
-            </button>
-          )}
-          <button type="button" disabled={imgBusy} onClick={() => backInputRef.current?.click()} className="rounded border border-gray-300 px-2 py-1 text-gray-600 disabled:opacity-50">
-            {backUrl ? "뒷면 다시 찍기" : "뒷면 사진 추가"}
-          </button>
-          {backUrl && (
-            <button type="button" disabled={imgBusy} onClick={() => deleteImage("back")} className="rounded border border-red-200 px-2 py-1 text-red-500 disabled:opacity-50">
-              사진 삭제
-            </button>
-          )}
-        </div>
       </div>
 
       {/* 사진 교체용 숨김 입력 */}
