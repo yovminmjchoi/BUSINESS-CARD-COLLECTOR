@@ -152,34 +152,39 @@ export default function ImageCropper({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/90">
-      <div className="flex items-center justify-between gap-2 p-4 text-white">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {suggested ? "명함 영역 자동 감지됨 · 필요하면 조절" : "명함 영역을 맞추세요"}
-        </span>
-        <button
-          type="button"
-          onClick={runAutoDetect}
-          disabled={busy}
-          className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
-        >
-          ✨ 자동 맞춤
-        </button>
-        <button
-          type="button"
-          onClick={rotate}
-          disabled={busy}
-          className="flex-shrink-0 rounded-lg border border-white/40 px-3 py-1 text-sm disabled:opacity-50"
-        >
-          ↻ 회전
-        </button>
+    <div className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden bg-neutral-950 text-white">
+      <div className="shrink-0 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+        <div className="mb-3 flex items-center">
+          <span className="min-w-0 flex-1 truncate text-lg font-semibold">
+            {suggested ? "명함 영역 자동 감지됨" : "명함 영역을 맞추세요"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={runAutoDetect}
+            disabled={busy}
+            className="min-h-11 rounded-lg border border-white/40 px-3 py-2 text-base font-medium disabled:opacity-50"
+          >
+            자동 맞춤
+          </button>
+          <button
+            type="button"
+            onClick={rotate}
+            disabled={busy}
+            className="min-h-11 rounded-lg border border-white/40 px-3 py-2 text-base font-medium disabled:opacity-50"
+          >
+            회전
+          </button>
+        </div>
       </div>
       {autoMsg && (
         <div className="px-4 pb-1 text-center text-xs text-amber-300">{autoMsg}</div>
       )}
 
-      <div className="flex flex-1 items-center justify-center overflow-hidden p-2">
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden px-3 py-3">
         <ReactCrop
+          className="cropper-react-crop max-h-full max-w-full"
           crop={crop}
           onChange={(c) => {
             touchedRef.current = true;
@@ -193,48 +198,50 @@ export default function ImageCropper({
             src={displaySrc}
             alt="크롭 대상"
             onLoad={handleImgLoad}
-            className="max-h-[70vh] w-auto max-w-full"
+            className="block max-h-full max-w-full object-contain"
             style={{ filter: filterCss }}
           />
         </ReactCrop>
       </div>
 
-      {/* 문서 정리 필터 선택 */}
-      <div className="flex justify-center gap-2 px-4 pb-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            className={
-              "rounded-full px-3 py-1 text-sm " +
-              (filter === f.id
-                ? "bg-white font-medium text-gray-900"
-                : "border border-white/40 text-white")
-            }
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
+      <div className="shrink-0 px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+        {/* 문서 정리 필터 선택 */}
+        <div className="mb-3 flex flex-wrap justify-center gap-2">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={
+                "min-h-10 rounded-full px-4 py-2 text-sm " +
+                (filter === f.id
+                  ? "bg-white font-medium text-gray-900"
+                  : "border border-white/40 text-white")
+              }
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
 
-      <div className="flex gap-2 p-4 pb-8">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={busy}
-          className="flex-1 rounded-lg border border-white/40 px-4 py-3 text-base text-white disabled:opacity-50"
-        >
-          {cancelLabel}
-        </button>
-        <button
-          type="button"
-          onClick={apply}
-          disabled={busy}
-          className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
-        >
-          {busy ? "처리 중…" : "크롭 적용"}
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="min-h-14 rounded-lg border border-white/40 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={apply}
+            disabled={busy}
+            className="min-h-14 rounded-lg bg-blue-600 px-4 py-3 text-base font-medium text-white disabled:opacity-50"
+          >
+            {busy ? "처리 중…" : "크롭 적용"}
+          </button>
+        </div>
       </div>
     </div>
   );
