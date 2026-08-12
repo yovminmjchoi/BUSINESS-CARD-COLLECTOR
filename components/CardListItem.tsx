@@ -52,10 +52,13 @@ export default function CardListItem({
         </span>
       )}
       {thumbUrl ? (
+        // List view intentionally uses a dedicated tiny thumbnail, never the full card image.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={thumbUrl}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="h-14 w-14 flex-shrink-0 rounded bg-gray-50 object-contain"
         />
       ) : (
