@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "thumbs:check": "node scripts/backfill-thumbnails.mjs",
+    "thumbs:backfill": "node scripts/backfill-thumbnails.mjs --execute"
   },
   "dependencies": {
     "@google/genai": "^2.11.0",

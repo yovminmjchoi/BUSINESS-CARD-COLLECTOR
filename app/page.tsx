@@ -19,6 +19,12 @@ const SEARCH_COLUMNS = [
   "address_ko", "address_en",
 ];
 
+function thumbnailPath(frontPath: string): string {
+  return frontPath.endsWith("/front.jpg")
+    ? frontPath.slice(0, -"front.jpg".length) + "thumb.jpg"
+    : `${frontPath}.thumb.jpg`;
+}
+
 export default async function ListPage({
   searchParams,
 }: {
@@ -71,7 +77,6 @@ export default async function ListPage({
     query = query.eq("status", status);
   }
 
-  // 태그 필터: 해당 태그를 가진 card_id 로 제한
   if (tag) {
     const { data: ct } = await supabase
       .from("card_tags")
@@ -82,7 +87,6 @@ export default async function ListPage({
   }
 
   if (q) {
-    // PostgREST or() 필터 구문을 깨는 문자 제거 후 부분일치(ILIKE, 와일드카드 *)
     const term = q.replace(/[,()*%]/g, " ").trim();
     if (term) {
       query = query.or(
@@ -128,7 +132,6 @@ export default async function ListPage({
     }),
   }));
 
-  // 같은 사람(person_id) 명함 개수 — "외 N장" 표시용
   const { data: allPersonIds } = await supabase.from("cards").select("person_id");
   const personCount = new Map<string, number>();
   for (const r of (allPersonIds ?? []) as { person_id: string }[]) {
@@ -141,9 +144,6 @@ export default async function ListPage({
     cardPrimary.set(r.id, r.is_primary === true);
   });
 
-  // 같은 사람 명함을 한 줄로 접기.
-  //   대표 = "현재 명함" 지정(is_primary)이 있으면 그것, 없으면 정렬상 첫(기본 최근 등록순).
-  //   태그는 그 사람의 (현재 화면에 보이는) 카드들 것을 합쳐서 대표에 표시.
   const personTagMap = new Map<string, Map<string, CardListTag>>();
   for (const c of cards) {
     const pid = cardPersonId.get(c.id) ?? c.id;
@@ -159,9 +159,9 @@ export default async function ListPage({
     const pid = cardPersonId.get(c.id) ?? c.id;
     const rep = repByPerson.get(pid);
     if (!rep) {
-      repByPerson.set(pid, c); // 첫 등장(정렬 순서 유지)
+      repByPerson.set(pid, c);
     } else if (cardPrimary.get(c.id) && !cardPrimary.get(rep.id)) {
-      repByPerson.set(pid, c); // 지정된 현재 명함이 우선 (Map 키 위치는 유지)
+      repByPerson.set(pid, c);
     }
   }
   const displayCards: CardListData[] = [...repByPerson.values()].map((c) => ({
@@ -174,15 +174,17 @@ export default async function ListPage({
     .select("id,name,color")
     .order("name");
 
-  // 썸네일 서명 URL 일괄 발급
+  // List view must never request the full front.jpg. A tiny thumb.jpg is stored next to it.
+  // Existing cards need the one-time backfill script before this branch is deployed.
   const thumbMap = new Map<string, string>();
-  const paths = cards
+  const paths = displayCards
     .map((c) => c.image_front_path)
     .filter((p): p is string => Boolean(p));
   if (paths.length > 0) {
+    const thumbPaths = paths.map(thumbnailPath);
     const { data: signed } = await supabase.storage
       .from("card-images")
-      .createSignedUrls(paths, 300);
+      .createSignedUrls(thumbPaths, 3600);
     signed?.forEach((s) => {
       if (s.signedUrl && s.path) thumbMap.set(s.path, s.signedUrl);
     });
@@ -225,7 +227,7 @@ export default async function ListPage({
           entries={displayCards.map((card) => ({
             card,
             thumbUrl: card.image_front_path
-              ? thumbMap.get(card.image_front_path) ?? null
+              ? thumbMap.get(thumbnailPath(card.image_front_path)) ?? null
               : null,
             groupCount: personCount.get(cardPersonId.get(card.id) ?? "") ?? 1,
           }))}
@@ -233,7 +235,6 @@ export default async function ListPage({
         />
       )}
 
-      {/* 촬영 FAB */}
       <Link
         href="/new"
         className="fixed bottom-20 left-1/2 z-20 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-full bg-blue-600 text-3xl leading-none text-white shadow-lg"
