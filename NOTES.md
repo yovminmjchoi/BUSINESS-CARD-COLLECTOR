@@ -13,13 +13,13 @@
 > 흐름 — 작업한 AI가 아래 5줄을 최신화 → 다른 AI에게 "NOTES 인수인계 로그부터 읽고 이어가".
 > (전체 원칙: `AI_COLLABORATION.md`)
 
-_갱신: 2026-07-25 · 코_
+_갱신: 2026-08-12 · 코_
 
-- **현재 상태:** 앱 배포·사용 중. PR #1~#5 반영(#2 원근보정만 revert). 메일(아웃룩식 서명+Gmail/기본/Outlook 선택), 크롭 화면 안정화, 일괄 중복 후보 선택 저장, 회사 묶음 편집·검색. **신규(클): 미팅 캘린더** — 명함 상세 `미팅 기록`에서 날짜·활동·메모 → **무료 Gemini가 Salesforce식 영문 활동기록 생성**(`sf-activity.md` 지침) → 편집·복사, `미팅` 탭에 날짜별 모아보기. **코 보강:** 캘린더 탭에서 명함 검색 후 바로 미팅 추가 가능, 미팅 저장 시 내 명함인지 확인, 빈 미팅 저장 방지, SF 노트 없이 원본 메모만 저장해도 목록에 보이게 수정, `{{ACTIVITY}}` 프롬프트 치환 추가. ⚠️ **`0009_meetings.sql` Supabase 실행 필요(안 하면 미팅 저장 안 됨).**
-- **진행 중:** 없음.
-- **열린 PR:** 없음.
-- **다음 우선순위:** 사용자가 0009 실행 후 미팅 기록·SF노트 생성·복사 동작 확인. 그 다음 기본 사진 인식(Gemini) 품질 개선.
-- **결정 필요:** `0009_meetings.sql` 실행(사용자). 미팅 캘린더 다음 단계(월간 뷰/.ics)는 나중. 내 정보 localStorage vs Supabase 동기화.
+- **현재 상태:** Vercel 앱 사용 중, 명함 약 600장 저장. Supabase Fair Use 경고 원인 점검 결과 목록에서 56px 썸네일 표시용으로 원본 `front.jpg` signed URL을 전체 발급·렌더링해 Storage egress가 커질 수 있는 구조 확인. 기존 원본은 보존해야 함.
+- **진행 중:** `codex/supabase-egress-thumbnails` 브랜치에서 전용 `thumb.jpg` 생성, 목록은 thumb 전용, lazy loading, 기존 카드용 안전 백필 스크립트 추가 완료. `CODEX_THUMBNAIL_HANDOFF.md` 참고.
+- **열린 PR:** 썸네일/egr​​ess 수정 PR을 draft로 열 예정. 기존 600장 백필 검증 전에는 production 배포 금지.
+- **다음 우선순위:** Codex 환경에서 `npm run thumbs:check` → 카드 수 확인 → `npm run thumbs:backfill` → `failed: 0`, 원본 보존 및 카드 row 수 불변 확인 → `npm run build` → 그 다음에만 머지/배포.
+- **결정 필요:** 백필 후 Supabase Usage에서 egress 감소 확인. 누락 thumb가 있으면 원본 fallback을 넣지 말고 백필 실패 원인을 먼저 해결.
 
 ---
 
