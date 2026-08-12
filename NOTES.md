@@ -15,11 +15,11 @@
 
 _갱신: 2026-08-12 · 코_
 
-- **현재 상태:** Vercel 앱 사용 중, 명함 약 600장 저장. Supabase Fair Use 경고 원인 점검 결과 목록에서 56px 썸네일 표시용으로 원본 `front.jpg` signed URL을 전체 발급·렌더링해 Storage egress가 커질 수 있는 구조 확인. 기존 원본은 보존해야 함.
-- **진행 중:** `codex/supabase-egress-thumbnails` 브랜치에서 전용 `thumb.jpg` 생성, 목록은 thumb 전용, lazy loading, 기존 카드용 안전 백필 스크립트 추가 완료. `CODEX_THUMBNAIL_HANDOFF.md` 참고.
-- **열린 PR:** 썸네일/egr​​ess 수정 PR을 draft로 열 예정. 기존 600장 백필 검증 전에는 production 배포 금지.
-- **다음 우선순위:** Codex 환경에서 `npm run thumbs:check` → 카드 수 확인 → `npm run thumbs:backfill` → `failed: 0`, 원본 보존 및 카드 row 수 불변 확인 → `npm run build` → 그 다음에만 머지/배포.
-- **결정 필요:** 백필 후 Supabase Usage에서 egress 감소 확인. 누락 thumb가 있으면 원본 fallback을 넣지 말고 백필 실패 원인을 먼저 해결.
+- **현재 상태:** Draft PR #6 `Reduce Supabase egress with dedicated thumbnails` 검증 완료. 목록은 원본 `front.jpg`가 아니라 전용 `thumb.jpg`만 signed URL로 받도록 변경됨. 누락 썸네일이 있어도 목록에서 원본으로 fallback하지 않는 정책 유지.
+- **실행 결과:** `npm run thumbs:check` 대상 front images 634장. 실제 `cards` row 수도 실행 전후 모두 634개. 첫 백필은 `created: 633 / failed: 1`(Storage Gateway Timeout)였고, 재실행에서 `created: 1 / skippedExisting: 633 / failed: 0`으로 완료.
+- **원본 보존 확인:** 기존 `front.jpg`/`back.jpg`는 overwrite, resize-in-place, rename, move, delete 하지 않음. 샘플 10개 확인 결과 front 10/10, back 9/9, thumb 10/10 모두 존재.
+- **검증:** `npm run build` 통과. 백필 스크립트는 service role이 `cards`를 직접 select하지 못하는 환경에서도 Supabase Management API read-only query로 대상 목록만 읽도록 보강됨.
+- **결정 필요:** PR #6은 아직 draft이며 자동 머지하지 않음. 사용자가 승인하면 머지/배포 후 Supabase Usage에서 Storage egress 감소를 관찰.
 
 ---
 

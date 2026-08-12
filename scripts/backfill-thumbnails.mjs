@@ -1,9 +1,27 @@
 import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
 import sharp from "sharp";
+
+function loadDotEnvLocal() {
+  try {
+    const text = readFileSync(".env.local", "utf8");
+    for (const line of text.split(/\n/)) {
+      const match = line.match(/^([A-Za-z0-9_]+)=(.*)$/);
+      if (!match) continue;
+      const [, key, value] = match;
+      if (!process.env[key]) process.env[key] = value;
+    }
+  } catch {
+    // .env.local is optional; CI/Vercel can provide real environment variables.
+  }
+}
+
+loadDotEnvLocal();
 
 const execute = process.argv.includes("--execute");
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseAccessToken = process.env.SUPABASE_ACCESS_TOKEN;
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
@@ -17,13 +35,17 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 const BUCKET = "card-images";
 const PAGE_SIZE = 200;
 
+function projectRefFromUrl(url) {
+  return url.match(/^https:\/\/([^.]+)\.supabase\.co\/?$/)?.[1] ?? null;
+}
+
 function thumbnailPath(frontPath) {
   return frontPath.endsWith("/front.jpg")
     ? frontPath.slice(0, -"front.jpg".length) + "thumb.jpg"
     : `${frontPath}.thumb.jpg`;
 }
 
-async function loadCards() {
+async function loadCardsFromSupabaseClient() {
   const cards = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
@@ -37,6 +59,64 @@ async function loadCards() {
     if (!data || data.length < PAGE_SIZE) break;
   }
   return cards;
+}
+
+async function readOnlyQuery(query) {
+  const projectRef = projectRefFromUrl(supabaseUrl);
+  if (!projectRef || !supabaseAccessToken) return null;
+
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${projectRef}/database/query/read-only`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${supabaseAccessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query }),
+    },
+  );
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Management API read-only query failed (${response.status}): ${text}`);
+  }
+  return JSON.parse(text);
+}
+
+async function loadCardsFromManagementApi() {
+  const cards = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const rows = await readOnlyQuery(`
+      select id, image_front_path
+      from public.cards
+      where image_front_path is not null
+      order by created_at asc
+      limit ${PAGE_SIZE}
+      offset ${offset}
+    `);
+    if (!Array.isArray(rows)) throw new Error("Management API returned an unexpected response.");
+    cards.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return cards;
+}
+
+async function loadCards() {
+  try {
+    return await loadCardsFromSupabaseClient();
+  } catch (error) {
+    const message = [
+      error instanceof Error ? error.message : "",
+      typeof error === "object" && error && "message" in error ? error.message : "",
+      typeof error === "object" && error && "code" in error ? error.code : "",
+      String(error),
+    ].join(" ");
+    if (!supabaseAccessToken || !/permission denied|42501/i.test(message)) {
+      throw error;
+    }
+    console.warn("Supabase client cannot read cards with this key; using Management API read-only query.");
+    return loadCardsFromManagementApi();
+  }
 }
 
 async function makeThumb(buffer) {
