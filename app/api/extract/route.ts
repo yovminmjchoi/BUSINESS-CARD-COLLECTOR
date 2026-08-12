@@ -11,6 +11,8 @@ const BUCKET = "card-images";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+type UploadFailure = { message: string };
+
 export async function GET() {
   return NextResponse.json({ ok: true });
 }
@@ -27,6 +29,26 @@ async function makeThumbnail(frontBuf: Buffer): Promise<Buffer> {
     .resize({ width: 240, height: 240, fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: 70, progressive: true })
     .toBuffer();
+}
+
+function uploadFailure(error: unknown): UploadFailure {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return { message: error.message };
+  }
+  return { message: "알 수 없는 업로드 오류" };
+}
+
+function isMissingObjectError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const statusCode =
+    "statusCode" in error && typeof error.statusCode === "string" ? error.statusCode : "";
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  return statusCode === "404" || /not found/i.test(message);
 }
 
 export async function POST(request: Request) {
@@ -97,28 +119,84 @@ export async function POST(request: Request) {
     );
   }
 
-  const uploadFiles = async () => {
-    const uploads = [
-      supabase.storage
-        .from(BUCKET)
-        .upload(imageFrontPath, frontBuf, { contentType: "image/jpeg", upsert: true }),
-      supabase.storage
-        .from(BUCKET)
-        .upload(thumbnailPath, thumbBuf, {
-          contentType: "image/jpeg",
-          cacheControl: "31536000",
-          upsert: true,
-        }),
+  const uploadFiles = async (): Promise<UploadFailure | null> => {
+    const requestPaths = new Set(
+      [imageFrontPath, thumbnailPath, imageBackPath].filter((path): path is string => Boolean(path)),
+    );
+    const createdPaths: string[] = [];
+
+    const cleanupRequestUploads = async () => {
+      const cleanupPaths = [...new Set(createdPaths)].filter(
+        (path) => requestPaths.has(path) && path.startsWith(`${base}/`),
+      );
+      if (cleanupPaths.length === 0) return;
+
+      const { error } = await supabase.storage.from(BUCKET).remove(cleanupPaths);
+      if (error) {
+        console.error("Partial image upload cleanup failed", {
+          draftId,
+          message: error.message,
+        });
+      }
+    };
+
+    for (const path of requestPaths) {
+      const { data, error } = await supabase.storage.from(BUCKET).download(path);
+      if (data && !error) {
+        return { message: "이미 같은 임시 이미지 경로가 있습니다. 다시 촬영해 주세요." };
+      }
+      if (error && !isMissingObjectError(error)) {
+        return uploadFailure(error);
+      }
+    }
+
+    const uploadOne = async (
+      path: string,
+      body: Buffer,
+      options: { contentType: string; cacheControl?: string },
+    ): Promise<UploadFailure | null> => {
+      try {
+        const { error } = await supabase.storage.from(BUCKET).upload(path, body, {
+          ...options,
+          upsert: false,
+        });
+        if (error) return uploadFailure(error);
+        createdPaths.push(path);
+        return null;
+      } catch (error) {
+        return uploadFailure(error);
+      }
+    };
+
+    const filesToUpload: {
+      path: string;
+      body: Buffer;
+      options: { contentType: string; cacheControl?: string };
+    }[] = [
+      { path: imageFrontPath, body: frontBuf, options: { contentType: "image/jpeg" } },
+      {
+        path: thumbnailPath,
+        body: thumbBuf,
+        options: { contentType: "image/jpeg", cacheControl: "31536000" },
+      },
     ];
     if (backBuf && imageBackPath) {
-      uploads.push(
-        supabase.storage
-          .from(BUCKET)
-          .upload(imageBackPath, backBuf, { contentType: "image/jpeg", upsert: true }),
-      );
+      filesToUpload.push({
+        path: imageBackPath,
+        body: backBuf,
+        options: { contentType: "image/jpeg" },
+      });
     }
-    const results = await Promise.all(uploads);
-    return results.find((result) => result.error)?.error ?? null;
+
+    for (const file of filesToUpload) {
+      const error = await uploadOne(file.path, file.body, file.options);
+      if (error) {
+        await cleanupRequestUploads();
+        return error;
+      }
+    }
+
+    return null;
   };
 
   if (mode === "store") {

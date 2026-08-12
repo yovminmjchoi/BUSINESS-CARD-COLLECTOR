@@ -18,8 +18,9 @@ _갱신: 2026-08-12 · 코_
 - **현재 상태:** Draft PR #6 `Reduce Supabase egress with dedicated thumbnails` 검증 완료. 목록은 원본 `front.jpg`가 아니라 전용 `thumb.jpg`만 signed URL로 받도록 변경됨. 누락 썸네일이 있어도 목록에서 원본으로 fallback하지 않는 정책 유지.
 - **실행 결과:** `npm run thumbs:check` 대상 front images 634장. 실제 `cards` row 수도 실행 전후 모두 634개. 첫 백필은 `created: 633 / failed: 1`(Storage Gateway Timeout)였고, 재실행에서 `created: 1 / skippedExisting: 633 / failed: 0`으로 완료.
 - **원본 보존 확인:** 기존 `front.jpg`/`back.jpg`는 overwrite, resize-in-place, rename, move, delete 하지 않음. 샘플 10개 확인 결과 front 10/10, back 9/9, thumb 10/10 모두 존재.
-- **검증:** `npm run build` 통과. 백필 스크립트는 service role이 `cards`를 직접 select하지 못하는 환경에서도 Supabase Management API read-only query로 대상 목록만 읽도록 보강됨.
-- **결정 필요:** PR #6은 아직 draft이며 자동 머지하지 않음. 사용자가 승인하면 머지/배포 후 Supabase Usage에서 Storage egress 감소를 관찰.
+- **추가 안전장치:** 신규 명함 업로드 실패 시 이번 요청에서 성공한 동일 draft 경로의 `front.jpg`/`thumb.jpg`/`back.jpg`만 best-effort cleanup 하도록 보강. 신규 업로드는 `upsert: false` + 사전 존재 확인으로 기존 파일 overwrite/delete 위험을 줄임.
+- **검증:** `npm run build` 통과. 격리된 Storage 테스트에서 partial upload 실패 후 남은 파일 0개 확인. 비영구 신규 명함 성공 경로 테스트에서 front/thumb/back 생성 및 DB insert 가능성 확인 후 rollback/delete 완료. 최종 production count: cards 634, storage objects 1521, 임시 파일 0개.
+- **결정 필요:** PR #6은 아직 draft이며 자동 머지하지 않음. 현재 기준으로 머지 가능. 머지/배포 후 Supabase Usage에서 Storage egress 감소를 관찰.
 
 ---
 
